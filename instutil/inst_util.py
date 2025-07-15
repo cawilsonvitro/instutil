@@ -53,7 +53,7 @@ def parse(filepath:str) -> tuple[list[str],list[str]]:
         filepath (str):  path to HMS 3000 data file
 
     Returns:
-        tuple[list[str],list[str]]: outputs the formmated file such that all normal values happen first then all -I then
+        tuple[list[str],list[str]]: outputs headers then data such that all normal values happen first then all -I then
         all values with +I
     """
     i = 0
@@ -76,7 +76,7 @@ def parse(filepath:str) -> tuple[list[str],list[str]]:
                     for obj in temp:datas.append(obj)
                 if i != 0 and i != 1:
                     try:
-                        # data = float(temp[0])
+                        float(temp[0])
                         for obj in temp:datas.append(obj)
                     except ValueError:
                         for obj in temp:headers.append(obj)
@@ -166,8 +166,8 @@ class sql_client():
         self.tools:list[str] = []
         self.tables: list[str] = []
         self.missing_col_error:str = "207"
-        self.illegal_char: list[str] = ["+","(",")","-"]
-        self.illegal_val: list[str] = ["hour", "second", "minute", "min"]
+        self.illegal_char: list[str] = ["+","(",")","-",","]
+        self.illegal_val: list[str] = ["hour", "second", "minute", "min", "-", ":"]
         self.hall_cols: list[str] = []
         
         #int prefixes
@@ -312,7 +312,8 @@ class sql_client():
         if self.hall_sys == "HMS":
             temp = self.cursor.execute("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'")
             self.tables = [x[2] for x in temp]
-            self.hall_cols,_ = parse(r"sample_file.txt")
+            #self.hall_cols,_ = parse(r"sample_file.txt")
+            self.hall_cols = ['DATE', 'User_Name', 'Sample_Name', 'I(mA)', 'B', 'D', 'D_T', 'MN', 'T(K)', 'Nb', 'u', 'rho', 'RH', 'RHA', 'RHB', 'NS', 'SIGMA', 'DELTA', 'ALPHA', 'Vab+I', 'Vbc+I', 'Vac+I', 'Vmac+I', 'V-mac+I', 'Vcd+I', 'Vda+I', 'Vbd+I', 'Vmbd+I', 'V-mbd', 'Vab-I', 'Vbc-I', 'Vac-I', 'Vmac-I', 'V-mac-I', 'Vcd-I', 'Vda-I', 'Vbd-I', 'Vmbd-I', 'Rs']
             self.check_columns(hall_name, (",").join(self.hall_cols))                    
                    
     def check_for_illegals(self, col_name: str) -> bool:
@@ -327,6 +328,22 @@ class sql_client():
         """
         for char in self.illegal_char:
             if col_name.find(char) != -1:
+                return False
+        return True
+    
+    def check_val(self, val: str) -> bool:
+        """_summary_
+
+        Args:
+            val (str): value you want to check
+
+        Returns:
+            bool: false if any illegal char exist\n
+            true if there are no illegal char
+        """
+        
+        for char in self.illegal_val:
+            if val.find(char) != -1:
                 return False
         return True
     
@@ -357,13 +374,17 @@ class sql_client():
                     query += f"{value[0]}, " #building query 
                 else:
                     query += f"\"{value[0]}\", "#building query 
-                
-            end += f"{value[1]}, "
+            
+            if self.check_val(value[1]):
+                end += f"{value[1]}, "
+            else:
+                end += f"\'{value[1]}\', "
         end = end[:-2] 
         
         query = query[:-2] 
         
         query = query + ")" + " values " + end + ")"
+        print(query)
         self.cursor.execute(query)
         self.sql.commit()
        
@@ -518,7 +539,7 @@ class tcp_multiserver():
                 current_socket.send(id.encode())
             
             elif client_data == "MEAS":
-                t: dt  = dt.now() #dt.now().strftime("%m-%d-%Y, Hour %H Min %M Sec %S")
+                t: dt  = dt.now()
                 tool = self.config[current_socket.getpeername()[0]]
                 print(f"got message from {tool}")
                 print("awaitning sample id")

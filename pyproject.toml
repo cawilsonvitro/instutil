@@ -1,3 +1,25 @@
 [build-system]
-requires = ["hatchling >= 1.26","pyodbc","json","re","time","socket","select","multiprocessing","queue","typing","json","datetime","traceback","sys","os","csv"]
-build-backend = "hatchling.build"
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "instutil"
+version = "0.0.3"
+authors = [
+  { name="Carl Wilson", email="cawilson@vitro.com" },
+]
+description = "tools for data processing and tcp communications"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+]
+license = "MIT"
+license-files = ["LICENSE"]
+
+
+
+[tool.setuptools.packages]
+find = {} 
