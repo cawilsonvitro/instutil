@@ -1,25 +1,18 @@
 [build-system]
-requires = ["setuptools"]
+requires = [ "setuptools",]
 build-backend = "setuptools.build_meta"
-
 
 [project]
 name = "instutil"
-version = "0.0.6"
-authors = [
-  { name="Carl Wilson", email="cawilson@vitro.com" },
-]
+version = "0.0.7"
 description = "tools for data processing and tcp communications"
 readme = "README.md"
 requires-python = ">=3.11"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "Operating System :: Microsoft :: Windows :: Windows 10",
-]
+classifiers = [ "Programming Language :: Python :: 3", "Operating System :: Microsoft :: Windows :: Windows 10",]
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = [ "LICENSE",]
+[[project.authors]]
+name = "Carl Wilson"
+email = "cawilson@vitro.com"
 
-
-
-[tool.setuptools.packages]
-find = {} 
+[tool.setuptools.packages.find]

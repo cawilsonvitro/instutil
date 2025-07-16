@@ -7,7 +7,7 @@ import socket
 import select
 from multiprocessing import Process, Queue #type:ignore
 from queue import Empty #type:ignore
-from typing import Any
+from typing import Any #type:ignore
 import json #type:ignore
 from datetime import datetime as dt
 import traceback
@@ -397,7 +397,7 @@ class sql_client():
 
 class tcp_multiserver():
     
-    def __init__(self, config:str , ip:str , port:int , bus_out:"Queue[Any]" , bus_in:"Queue[Any]", max_connections:int = 5):
+    def __init__(self, config:str , ip:str , port:int, max_connections:int = 5):#, bus_out:"Queue[Any]" , bus_in:"Queue[Any]", max_connections:int = 5):
         """_summary_        class for handing multithreaded operation of a tcp server, handles communication to all intrument computer,\n
         to sql servers, and displaying information on the gu
 
@@ -412,7 +412,7 @@ class tcp_multiserver():
         self.ADDR: tuple[str, int] = (ip, port)
         # print(self.ADDR)
         self.max_connections: int = max_connections
-        self.server_socket: socket.socket
+        self.server_socket: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connected_sockets: list[socket.socket] = []  # list of the client sockets being connected
         
         self.starttime: float
@@ -420,8 +420,8 @@ class tcp_multiserver():
         
         #data managementjson
         self.client_data: str
-        self.bus_out: "Queue[Any]" = bus_out
-        self.bus_in: "Queue[Any]" = bus_in
+        #self.bus_out: "Queue[Any]" = bus_out
+       # self.bus_in: "Queue[Any]" = bus_in
         self.SQL: sql_client = sql_client("config.json")
         self.samples: list[sample] = []  # list of samples
         
@@ -429,6 +429,7 @@ class tcp_multiserver():
         self.read_to_read: list[socket.socket] = []
         
         #connection flags
+        self.retries: int = 0
         self.network_status: bool = False
         self.db_status: bool|None = False
         
@@ -505,6 +506,18 @@ class tcp_multiserver():
         '''Takes the msg received from the client and handles it accordingly'''
         try:
             client_data = current_socket.recv(1024).decode()
+            #client has 3 tries to send something
+            zero_byte_count:int = 0
+            while zero_byte_count < 3:
+                if client_data:
+                    break
+                else:
+                    zero_byte_count += 1
+                    print(zero_byte_count)
+                    raise ConnectionResetError
+                    
+            if zero_byte_count == int(3): 
+                current_socket.close()
            # self.bus_out.put(client_data)  # put the data in the bus for the main app to handle
           #  incoming = self.bus_in.get(timeout=5)  # wait for the main app to process the data
           #  print(incoming)
@@ -681,14 +694,17 @@ class tcp_multiserver():
                 tool = current_socket.getpeername()[0]
                 current_socket.send(client_data.encode())
              #   print("Responded by: Sending the message back to the client")
-                    
+    
+        
     def server(self):
         """server setup and socket handling"""
         print("Setting up server...")
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind(self.ADDR)
-
+        try:
+            self.server_socket.bind(self.ADDR)  
+        except OSError:
+            pass
         self.server_socket.listen()
+        self.retries = 0
         print("\n* Server is ON *\n")
         print("Waiting for clients to establish connection...")
         self.starttime = time.time()
@@ -709,26 +725,49 @@ class tcp_multiserver():
                             self.active_client_sockets()
                             continue
                         self.serve_client(current_socket)
+            
             except ValueError:
-                while len(self.connected_sockets) == 0:#while waiting for new clients
-                                ready_to_read, _, _ = select.select(
-                                [self.server_socket] + self.connected_sockets, [], []
-                                )
+                while self.retries < 5:
+                    self.server()
+                    time.sleep(1)
+                    self.retries += 1
+                #all retries failed hard restarting server
+                
+                self.server_socket.close()
+                
+                self.server()
+                #restart listening loop
+                
+                
+                # while len(self.connected_sockets) == 0:#while waiting for new clients
+                    
+                                # ready_to_read, _, _ = select.select(
+                                # [self.server_socket] + self.connected_sockets, [], []
+                                # )
                                 
-                                for current_socket in ready_to_read:
-                                    if (
-                                        current_socket is self.server_socket
-                                    ):  # if the current socket is the new socket we receive from the server
-                                        (client_socket, client_address) = current_socket.accept()
-                                        print("\nNew client joined!", client_address)
-                                        self.connected_sockets.append(client_socket)
-                                        self.active_client_sockets()
-                                        continue
+                                # for current_socket in ready_to_read:
+                                #     if (
+                                #         current_socket is self.server_socket
+                                #     ):  # if the current socket is the new socket we receive from the server
+                                #         (client_socket, client_address) = current_socket.accept()
+                                #         print("\nNew client joined!", client_address)
+                                #         self.connected_sockets.append(client_socket)
+                                #         self.active_client_sockets()
+                                #         continue
             except KeyboardInterrupt:
                 self.all_sockets_closed()
             except Exception:
                 print("Server issue")
                 print(traceback.format_exc())
+                while self.retries < 5:
+                    self.server()
+                    time.sleep(1)
+                    self.retries += 1
+                #all retries failed hard restarting server
+                
+                self.server_socket.close()
+                
+                self.server()
 
     def quit(self):
         """
@@ -852,5 +891,7 @@ class FileManager:
                 writer.writerow(row)  
 #endregion
     
-    
+
+
+
     
