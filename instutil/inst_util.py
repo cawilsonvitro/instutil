@@ -240,8 +240,8 @@ class sql_client():
             columns (str): string of columns seperated by comma
         """
         try:
-            # print("FROM DB HANDLER")
-            # print(columns)
+            # #print("FROM DB HANDLER")
+            # #print(columns)
             column_check: str = f"SELECT "#\"{columns}\" FROM {table}"
             temp_list = columns.split(",")
             for column in temp_list:
@@ -279,9 +279,9 @@ class sql_client():
 
                 query += ",".join(cols_to_add)
    
-                # print(f"adding {cols_to_add}")
+                # #print(f"adding {cols_to_add}")
                 #  \"{col_to_add}\" VARCHAR(255)"
-                # print(query)
+                # #print(query)
                 self.cursor.execute(query)
                 self.sql.commit()
                    
@@ -376,7 +376,7 @@ class sql_client():
                     query += f"\"{value[0]}\", "#building query 
             
             if self.check_val(value[1]):
-                end += f"{value[1]}, "
+                end += f"\'{value[1]}\', "
             else:
                 end += f"\'{value[1]}\', "
         end = end[:-2] 
@@ -384,7 +384,7 @@ class sql_client():
         query = query[:-2] 
         
         query = query + ")" + " values " + end + ")"
-        print(query)
+        #print(query)
         self.cursor.execute(query)
         self.sql.commit()
        
@@ -410,7 +410,7 @@ class tcp_multiserver():
             max_connections (int, optional): number of connections allowed to server. Defaults to 5.
         """
         self.ADDR: tuple[str, int] = (ip, port)
-        print(self.ADDR)
+        #print(self.ADDR)
         self.max_connections: int = max_connections
         self.server_socket: socket.socket
         self.connected_sockets: list[socket.socket] = []  # list of the client sockets being connected
@@ -449,7 +449,7 @@ class tcp_multiserver():
             self.SQL.check_tables()
             self.db_status = True
         except Exception:
-            print(traceback.format_exc())
+            #print(traceback.format_exc())
             self.db_status = False
             
         return
@@ -471,18 +471,18 @@ class tcp_multiserver():
             socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
             self.network_status = True
         except socket.error:
-            print(traceback.format_exc())
+            #print(traceback.format_exc())
             self.network_status = False
         try:
             self.db_status  = self.SQL.quit()
             self.SQL_startup()
         except Exception:
-            print(traceback.format_exc())
+            #print(traceback.format_exc())
             self.SQL_startup()
         
     def all_sockets_closed(self):
         """closes the server socket and displays the duration of the connection"""
-        print("\n\nAll Clients Disconnected\nClosing The Server...")
+        #print("\n\nAll Clients Disconnected\nClosing The Server...")
         endtime: float = time.time()
         elapsed = time.strftime("%H:%M:%S", time.gmtime(endtime - self.starttime))
         unit = (
@@ -493,13 +493,13 @@ class tcp_multiserver():
             else "Hours"
         )
         self.server_socket.close()
-        print(f"\nThe Server Was Active For {elapsed} {unit}\n\n")
+        #print(f"\nThe Server Was Active For {elapsed} {unit}\n\n")
         
     def active_client_sockets(self):
         """prints the IP and PORT of all connected sockets"""
-        print("\nCurrently Connected Sockets:")
+        #print("\nCurrently Connected Sockets:")
         for c in self.connected_sockets:
-            print("\t", c.getpeername())  
+            #print("\t", c.getpeername())  
     
     def serve_client(self, current_socket : socket.socket):
         '''Takes the msg received from the client and handles it accordingly'''
@@ -507,14 +507,14 @@ class tcp_multiserver():
             client_data = current_socket.recv(1024).decode()
            # self.bus_out.put(client_data)  # put the data in the bus for the main app to handle
           #  incoming = self.bus_in.get(timeout=5)  # wait for the main app to process the data
-          #  print(incoming)
+          #  #print(incoming)
             date_time: str = time.strftime("%d/%m/%Y, %H:%M:%S")
-            print(
+            #print(
                 f"\nReceived new message form client {current_socket.getpeername()} at {date_time}:"
             )
 
         except ConnectionResetError:
-            print(f"\nThe client {current_socket.getpeername()} has disconnected...")
+            #print(f"\nThe client {current_socket.getpeername()} has disconnected...")
             self.connected_sockets.remove(current_socket)
             current_socket.close()
             if len(self.connected_sockets) != 0:  # check for other connected sockets
@@ -524,14 +524,14 @@ class tcp_multiserver():
             """the whole disconnection sequence is triggered from the exception handler, se we will just raise the exception
                     to close the server socket"""
         except Exception:
-            print("serving client error")
-            print(traceback.format_exc())
+            #print("serving client error")
+            #print(traceback.format_exc())
         else:
-            print(client_data)
+            #print(client_data)
 
             if client_data == "Bye":
                 current_socket.send("bye".encode())
-                print(
+                #print(
                     "Connection closed",
                 )
             elif client_data == "ID":
@@ -541,11 +541,11 @@ class tcp_multiserver():
             elif client_data == "MEAS":
                 t: dt  = dt.now()
                 tool = self.config[current_socket.getpeername()[0]]
-                print(f"got message from {tool}")
-                print("awaitning sample id")
+                #print(f"got message from {tool}")
+                #print("awaitning sample id")
                 current_socket.send("awaiting sampleid".encode())
                 sample_id = current_socket.recv(1024).decode()
-                print(f"got {sample_id} from {tool}")
+                #print(f"got {sample_id} from {tool}")
                 current_socket.send(f"awaiting value from {tool}".encode())
                 #check if current sample exists
                 found:bool = False
@@ -567,10 +567,10 @@ class tcp_multiserver():
                 
                 for samp in self.samples:
                     
-                    print(samp.id)
+                    #print(samp.id)
                     
                     for key in samp.insts:
-                        print(key, samp.insts[key])
+                        #print(key, samp.insts[key])
                 
                 values: list[list[str]]#list[list[str | dt] | list[str]] | list[list[str|float|int]]#list[list[str]] | list[str] 
                 values = [
@@ -579,16 +579,16 @@ class tcp_multiserver():
                     ]
                            
                 #first get tool to build SQL query with
-                print(f"awaiting value from {tool}")
+                # #print(f"awaiting value from {tool}")
                 
                 #get value
                 
-                value = current_socket.recv(32768).decode()
+                value = current_socket.recv(65536).decode()
                 time.sleep(1)
-                print(f"got  {value}")
+                # #print(f"got  {value}")
                 
                 # confirm
-                print("Writing back")
+                # #print("Writing back")
                 current_socket.send("data received".encode())
                 
                 #checks all samples and removes completed samples
@@ -604,7 +604,7 @@ class tcp_multiserver():
                 if tool == "nearir":
                     #get spectra
                     wvs: list[str]  = value.split(",")
-                    spec = current_socket.recv(32768).decode()
+                    spec = current_socket.recv(65536).decode()
                     time.sleep(1)
                     spec = spec.split(",")
                     current_socket.send("data received".encode())
@@ -613,7 +613,6 @@ class tcp_multiserver():
                     cols: list[str] = [] 
                     for wv in wvs:
                         wv2 = wv[:wv.index(".")]
-                        print(wv2)
                         col = [f"{self.prefixes[tool]}_{wv2}", spec[i]]
                         values.append(col)
                         
@@ -650,12 +649,12 @@ class tcp_multiserver():
                     for samp in self.samples:
                         if not samp.insts[tool]:
                             ids.append(samp.id)
-                            print(samp.id)
+                            # #print(samp.id)
                     msg: str = ",".join(ids)
 
                 else:#if len(ids) == 0:
                     msg:str = "None"
-                print(msg)
+                # #print(msg)
                 current_socket.send(msg.encode())
 
                 
@@ -663,7 +662,7 @@ class tcp_multiserver():
             elif (
                 client_data.upper() == "QUIT" or client_data.upper() == "Q"
             ):  # close connection with the client and close socket
-                print(
+                #print(
                     f"Closing the socket with client {current_socket.getpeername()} now..."
                 )
                 current_socket.send("Bye".encode())
@@ -680,17 +679,17 @@ class tcp_multiserver():
             else:
                 tool = current_socket.getpeername()[0]
                 current_socket.send(client_data.encode())
-             #   print("Responded by: Sending the message back to the client")
+             #   #print("Responded by: Sending the message back to the client")
                     
     def server(self):
         """server setup and socket handling"""
-        print("Setting up server...")
+        #print("Setting up server...")
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind(self.ADDR)
 
         self.server_socket.listen()
-        print("\n* Server is ON *\n")
-        print("Waiting for clients to establish connection...")
+        #print("\n* Server is ON *\n")
+        #print("Waiting for clients to establish connection...")
         self.starttime = time.time()
         self.connected_sockets = []  # list of the client sockets being connected
         while True:            
@@ -704,7 +703,7 @@ class tcp_multiserver():
                             current_socket is self.server_socket
                         ):  # if the current socket is the new socket we receive from the server
                             (client_socket, client_address) = current_socket.accept()
-                            print("\nNew client joined!", client_address)
+                            #print("\nNew client joined!", client_address)
                             self.connected_sockets.append(client_socket)
                             self.active_client_sockets()
                             continue
@@ -720,15 +719,15 @@ class tcp_multiserver():
                                         current_socket is self.server_socket
                                     ):  # if the current socket is the new socket we receive from the server
                                         (client_socket, client_address) = current_socket.accept()
-                                        print("\nNew client joined!", client_address)
+                                        #print("\nNew client joined!", client_address)
                                         self.connected_sockets.append(client_socket)
                                         self.active_client_sockets()
                                         continue
             except KeyboardInterrupt:
                 self.all_sockets_closed()
             except Exception:
-                print("Server issue")
-                print(traceback.format_exc())
+                #print("Server issue")
+                #print(traceback.format_exc())
 
     def quit(self):
         """
@@ -765,7 +764,7 @@ class client():
             self.soc.connect(self.ADDR)
 
         except OSError or ConnectionRefusedError:
-            print(
+            #print(
             "\nPlease check if the server is connected to the internet\n"
             "and that the IP and PORT numbers are correct on both ends\n"
             )
@@ -786,7 +785,7 @@ class client():
             self.soc.send("ID".encode())
             
             self.tool = self.soc.recv(1024).decode()
-            print(self.tool)
+            #print(self.tool)
         else:
             return self.tool
         
@@ -822,15 +821,15 @@ class FileManager:
                 total_size += os.path.getsize(fp)                  
         
         if total_size > byte_lim:
-            print("I ran")
-            print("Rotating files")
+            #print("I ran")
+            #print("Rotating files")
             #sort files by date
             files = os.listdir(self.path)
             files.sort(key=lambda x: os.path.getmtime(os.path.join(self.path, x)))
             #delete oldest file
             oldest_file = os.path.join(self.path, files[0])
             os.remove(oldest_file)
-            print(f"Deleted {oldest_file}")
+            #print(f"Deleted {oldest_file}")
 
     def write_data(self, sample_num: str, header: list[str], data: list[str] | list[list[str | float | int]]) -> None:
         """_summary_ writes data to data file
