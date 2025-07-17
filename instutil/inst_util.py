@@ -504,7 +504,7 @@ class tcp_multiserver():
         for c in self.connected_sockets:
             print("\t", c.getpeername())
         
-        self.display.test() #tests connections to gui
+        self.display.test_connections() #tests connections to gui
     
     def serve_client(self, current_socket : socket.socket):
         '''Takes the msg received from the client and handles it accordingly'''
