@@ -397,7 +397,7 @@ class sql_client():
 
 class tcp_multiserver():
     
-    def __init__(self, config:str , ip:str , port:int, max_connections:int = 5):#, bus_out:"Queue[Any]" , bus_in:"Queue[Any]", max_connections:int = 5):
+    def __init__(self, config:str , ip:str , port:int, gui:Any, max_connections:int = 5):#, bus_out:"Queue[Any]" , bus_in:"Queue[Any]", max_connections:int = 5):
         """_summary_        class for handing multithreaded operation of a tcp server, handles communication to all intrument computer,\n
         to sql servers, and displaying information on the gu
 
@@ -417,7 +417,9 @@ class tcp_multiserver():
         
         self.starttime: float
         
+        self.display = gui
         
+        print("From TCP SERVER:",self.display.teststr)
         #data managementjson
         self.client_data: str
         #self.bus_out: "Queue[Any]" = bus_out
@@ -500,7 +502,9 @@ class tcp_multiserver():
         """prints the IP and PORT of all connected sockets"""
         print("\nCurrently Connected Sockets:")
         for c in self.connected_sockets:
-            print("\t", c.getpeername())  
+            print("\t", c.getpeername())
+        
+        self.display.test() #tests connections to gui
     
     def serve_client(self, current_socket : socket.socket):
         '''Takes the msg received from the client and handles it accordingly'''
