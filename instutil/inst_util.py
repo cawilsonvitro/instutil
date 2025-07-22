@@ -376,15 +376,15 @@ class sql_client():
                     query += f"\"{value[0]}\", "#building query 
             
             if self.check_val(value[1]):
-                end += f"\'{value[1]}, \'"
+                end += f"\'{value[1]}\',"
             else:
                 end += f"\'{value[1]}\', "
-        end = end[:-2] 
+        end = end[:-1] 
         
         query = query[:-2] 
         
         query = query + ")" + " values " + end + ")"
-        # print(query)
+        print(query)
         self.cursor.execute(query)
         self.sql.commit()
        
@@ -419,7 +419,7 @@ class tcp_multiserver():
         
         self.display = gui
         
-        print("From TCP SERVER:",self.display.teststr)
+        # print("From TCP SERVER:",self.display.teststr)
         #data managementjson
         self.client_data: str
         #self.bus_out: "Queue[Any]" = bus_out
@@ -520,7 +520,7 @@ class tcp_multiserver():
                     print(zero_byte_count)
                     raise ConnectionResetError
                     
-            if zero_byte_count == int(3): 
+            if zero_byte_count == int(3):
                 current_socket.close()
            # self.bus_out.put(client_data)  # put the data in the bus for the main app to handle
           #  incoming = self.bus_in.get(timeout=5)  # wait for the main app to process the data
@@ -529,6 +529,7 @@ class tcp_multiserver():
             print(
                 f"\nReceived new message form client {current_socket.getpeername()} at {date_time}:"
             )
+            print(client_data)
 
         except ConnectionResetError:
             print(f"\nThe client {current_socket.getpeername()} has disconnected...")
@@ -537,7 +538,8 @@ class tcp_multiserver():
             if len(self.connected_sockets) != 0:  # check for other connected sockets
                 self.active_client_sockets()
             else:
-                raise ValueError
+                print("No more clients connected")
+                self.active_client_sockets()
             """the whole disconnection sequence is triggered from the exception handler, se we will just raise the exception
                     to close the server socket"""
         except Exception:
@@ -658,11 +660,8 @@ class tcp_multiserver():
                     
             elif client_data == "UPDATE":
                 #update the requested tools drop down list of samples that need measured
-                
                 tool = self.config[current_socket.getpeername()[0]]
-                
                 ids: list[str] = []
-                
                 if len(self.samples) != 0:
                     for samp in self.samples:
                         if not samp.insts[tool]:
@@ -670,12 +669,10 @@ class tcp_multiserver():
                             # print(samp.id)
                     msg: str = ",".join(ids)
 
-                else:#if len(ids) == 0:
+                if len(ids) == 0:#if len(ids) == 0:
+                    print("No samples to update")
                     msg:str = "None"
-                # print(msg)
                 current_socket.send(msg.encode())
-
-                
                 
             elif (
                 client_data.upper() == "QUIT" or client_data.upper() == "Q"
@@ -690,15 +687,15 @@ class tcp_multiserver():
                 if len(self.connected_sockets) != 0:
                     self.active_client_sockets()
                 else:
-                    raise ValueError
+                    print("No more clients connected")
+                    self.active_client_sockets()
                 """the whole disconnection sequence is triggered from the exception handler, se we will just raise the exception
                     to close the server socket"""
             
             else:
                 tool = current_socket.getpeername()[0]
                 current_socket.send(client_data.encode())
-             #   print("Responded by: Sending the message back to the client")
-    
+             #   print("Responded by: Sending the message back to the client")   
         
     def server(self):
         """server setup and socket handling"""
@@ -736,7 +733,8 @@ class tcp_multiserver():
                     time.sleep(1)
                     self.retries += 1
                 #all retries failed hard restarting server
-                
+                traceback.print_exc()
+                print(" VALUE ERROR")
                 self.server_socket.close()
                 
                 self.server()
@@ -865,8 +863,6 @@ class FileManager:
                 total_size += os.path.getsize(fp)                  
         
         if total_size > byte_lim:
-            # print("I ran")
-            # print("Rotating files")
             #sort files by date
             files = os.listdir(self.path)
             files.sort(key=lambda x: os.path.getmtime(os.path.join(self.path, x)))
