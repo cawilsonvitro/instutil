@@ -112,6 +112,8 @@ class sample():
         
         self.id:str = ""
         
+        self.description: str = ""
+        
         self.insts = {
             'fourpp': False,
             "nearir": False,
@@ -457,7 +459,7 @@ class tcp_multiserver():
             
         return
           
-    def connections(self, host:str = "8.8.8.8", port: int = 53, timeout: int = 3):
+    def connections(self, host:str = "8.8.8.8", port: int = 53, timeout: int = 30):
         """        checks the c onnection to the internet as well as connection to the db, if the db connection fails
         it attempts to reconnect
         
@@ -564,13 +566,14 @@ class tcp_multiserver():
                 # print("awaitning sample id")
                 current_socket.send("awaiting sampleid".encode())
                 sample_id = current_socket.recv(1024).decode()
-                # print(f"got {sample_id} from {tool}")
-                current_socket.send(f"awaiting value from {tool}".encode())
+                print(f"got {sample_id} from {tool}")
                 #check if current sample exists
                 found:bool = False
                 i: int = 0
+                current_sample:sample
                 for samp in self.samples:
                     if samp.id == sample_id:
+                        current_sample = samp
                         samp.insts[tool] = True
                         found = True
                         insts = list(samp.insts.values())
@@ -583,7 +586,9 @@ class tcp_multiserver():
                     temp_samp.id = sample_id
                     temp_samp.insts[tool] = True
                     self.samples.append(temp_samp)
-                
+                    current_sample = temp_samp
+                    
+                    
                 # for samp in self.samples:
                     
                     # print(samp.id)
@@ -592,16 +597,23 @@ class tcp_multiserver():
                     #     print(key, samp.insts[key])
                 
                 values: list[list[str]]#list[list[str | dt] | list[str]] | list[list[str|float|int]]#list[list[str]] | list[str] 
+  
+                #first get tool to build SQL query with
+                # print(f"awaiting value from {tool}")
+                print(current_sample.description)
+                if current_sample.description == "":
+                    #request sample description
+                    print("awaiting sample description")
+                    current_socket.send("DESC".encode())
+                    current_sample.description = current_socket.recv(32768).decode()
                 values = [
                     ["time", str(t)],
                     ["sample_id", sample_id],
+                    ["Description", current_sample.description],
                     ]
-                           
-                #first get tool to build SQL query with
-                # print(f"awaiting value from {tool}")
-                
+                              
                 #get value
-                
+                current_socket.send(f"awaiting value from {tool}".encode())
                 value = current_socket.recv(32768).decode()
                 time.sleep(1)
                 # print(f"got  {value}")
