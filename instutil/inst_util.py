@@ -11,11 +11,12 @@ from typing import Any #type:ignore
 import json #type:ignore
 from datetime import datetime as dt
 import traceback
-import sys
+import logging
 import os
 import csv
 #endregion 
-
+#region logging
+#endregion
 #region functions
 
 def strip_space(string_in: str) -> list[str]:
@@ -399,7 +400,7 @@ class sql_client():
 
 class tcp_multiserver():
     
-    def __init__(self, config:str , ip:str , port:int, gui:Any, max_connections:int = 5):#, bus_out:"Queue[Any]" , bus_in:"Queue[Any]", max_connections:int = 5):
+    def __init__(self, config:str , ip:str , port:int, gui:Any, max_connections:int = 5,):#, bus_out:"Queue[Any]" , bus_in:"Queue[Any]", max_connections:int = 5):
         """_summary_        class for handing multithreaded operation of a tcp server, handles communication to all intrument computer,\n
         to sql servers, and displaying information on the gu
 
@@ -437,11 +438,21 @@ class tcp_multiserver():
         self.network_status: bool = False
         self.db_status: bool|None = False
         
+        #logging
+
+        class_name = str(type(self))
+        name = class_name.split(" ")[-1][:-1].replace("'", "")
+        
+        self.logger = logging.getLogger(name)
+        self.logger.info("Server initalized")
+
+
+        self.logger.debug(f"Opening config from{config}")
         with open(config, 'r') as file:
             config_dict: dict[str,dict[str,str]] = json.load(file)
             self.config: dict[str, str] = config_dict['Tool_ip']
             self.prefixes: dict[str, str] = config_dict['Tool_pre'] 
-        
+        self.logger.debug("Loaded config")
         return
                
     def SQL_startup(self):
@@ -806,7 +817,13 @@ class client():
         self.tool = ""
         
         self.soc: socket.socket
+        #logging
+        class_name = str(type(self))
+        name = class_name.split(" ")[-1][:-1].replace("'", "")
         
+        self.logger = logging.getLogger(name)
+        
+        self.logger.debug(f"tcp client starts with ip {ip} and port {port}")
         # self.msg_in = msg_in
         # self.msg_out = msg_out
 
@@ -816,18 +833,18 @@ class client():
         self.soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.soc.connect(self.ADDR)
-
-        except OSError or ConnectionRefusedError:
-            print(
-            "\nPlease check if the server is connected to the internet\n"
-            "and that the IP and PORT numbers are correct on both ends\n"
-            )
-            sys.exit()
+            self.logger.debug(f"connected to server at {self.ADDR}")
+        except OSError or ConnectionRefusedError as e:
+            self.logger.error(f"Connection to server at {self.ADDR} failed. Please check if the server is connected to the internet and that the IP and PORT numbers are correct on both ends")
+            self.logger.error(traceback.format_exc())
+            return e
+            # sys.exit()
             
     def disconnect(self):
         '''
         disconnects
         '''
+        self.logger.info(f"Disconnecting from server at {self.ADDR}")
         self.soc.send("Q".encode())
         self.soc.close()
             
@@ -835,10 +852,12 @@ class client():
         '''
         gets id of client
         '''
+        self.logger.debug("Requesting ID from server")
         if self.tool == "":
             self.soc.send("ID".encode())
             
             self.tool = self.soc.recv(1024).decode()
+            self.logger.debug(f"Received ID from server: {self.tool}")
             # print(self.tool)
         else:
             return self.tool
@@ -851,12 +870,21 @@ class FileManager:
             tool (str): _description_
             size_lim (str): _description_
         """
-
+        #logging
+        class_name = str(type(self))
+        name = class_name.split(" ")[-1][:-1].replace("'", "")
+        
+        self.logger = logging.getLogger(name)
+        
+        self.logger.debug(f"file manager starts with tool {tool} and size limit {size_lim} GB")
+        
         self.tool = tool
         self.path: str = os.path.join(os.getcwd(),"tools", tool, "data")
+        self.logger.debug(f"looking for data folder at {self.path}")
         if not os.path.exists(self.path):
+            self.logger.debug(f"data folder not found at {self.path}, creating it")
             os.mkdir(self.path)    
-        
+        self.logger.debug(f"data folder found at {self.path}")
         
         self.size_lim = size_lim #in gb
     #first check folder size
@@ -869,17 +897,21 @@ class FileManager:
         #get file size
         byte_lim: float = float(self.size_lim) * 1024 * 1024 * 1024
         total_size = 0
+        self.logger.debug(f"checking folder size, limit is {byte_lim} bytes")
         for dirpath,_,filenames in os.walk(self.path):
             for f in filenames:
                 fp = os.path.join(dirpath, f)
                 total_size += os.path.getsize(fp)                  
         
+        
         if total_size > byte_lim:
+            self.logger.debug(f"folder size {total_size} bytes is larger than limit {byte_lim} bytes, deleting oldest file")
             #sort files by date
             files = os.listdir(self.path)
             files.sort(key=lambda x: os.path.getmtime(os.path.join(self.path, x)))
             #delete oldest file
             oldest_file = os.path.join(self.path, files[0])
+            self.logger.debug(f"deleting oldest file {oldest_file}")
             os.remove(oldest_file)
             # print(f"Deleted {oldest_file}")
 
@@ -891,16 +923,19 @@ class FileManager:
             header (list[str]): column names
             data (list[str] | list[list[str  |  float  |  int]]): data to write out
         """
+        
+        self.logger.debug(f"writing data to file for sample {sample_num} with header {header} and data {data}")
         self.rotating_file_handler()
         self.date = dt.now().strftime("%m-%d-%Y, Hour %H Min %M Sec %S")
         
         file_name = f"{self.path}\\{sample_num}_{self.tool}_{self.date}.csv"
-        
+        self.logger.debug(f"writing data to file {file_name}")
         with open(file_name, "w") as f:
             writer = csv.writer(f)
             writer.writerow(header)
             for row in data:
-                writer.writerow(row)  
+                writer.writerow(row)
+        self.logger.debug(f"data written to file {file_name}")
 #endregion
     
 
