@@ -454,7 +454,30 @@ class tcp_multiserver():
             self.prefixes: dict[str, str] = config_dict['Tool_pre'] 
         self.logger.debug("Loaded config")
         return
-               
+        
+    def get_sample(self, tool, sample_id):
+            found:bool = False
+            i: int = 0
+            current_sample:sample
+            for samp in self.samples:
+                if samp.id == sample_id:
+                    current_sample = samp
+                    samp.insts[tool] = True
+                    found = True
+                    insts = list(samp.insts.values())
+                    if all(insts):
+                        del self.samples[i]
+                    break
+                i += 1
+            if not found:
+                temp_samp:sample = sample()
+                temp_samp.id = sample_id
+                temp_samp.insts[tool] = True
+                self.samples.append(temp_samp)
+                current_sample = temp_samp
+            return current_sample
+
+    
     def SQL_startup(self):
         '''
         starts up sql server using the sql_client class
@@ -483,7 +506,7 @@ class tcp_multiserver():
         self.network_status = False
         self.db_status = False
         try:
-            socket.setdefaulttimeout(timeout)
+            # socket.setdefaulttimeout(3) #removed to allow desc through might lead to future errors need to find better solution
             socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
             self.network_status = True
         except socket.error:
@@ -521,6 +544,14 @@ class tcp_multiserver():
     
     def serve_client(self, current_socket : socket.socket):
         '''Takes the msg received from the client and handles it accordingly'''
+        self.logger.debug("getting meta data for server side functions")
+        try:               
+            tool = self.config[current_socket.getpeername()[0]]
+        except KeyError:
+            # client_data = "Tool not found" ### UNCOMMENT FOR DEPLOYMENT COMMENTED FOR DEBUGGING
+            self.logger.error(f"{tool} not found please add to config")
+        t: dt  = dt.now()
+        self.logger.debug(f"got message from {tool} at {t}")
         try:
             client_data = current_socket.recv(1024).decode()
             #client has 3 tries to send something
@@ -544,8 +575,18 @@ class tcp_multiserver():
             )
             print(client_data)
 
-        except ConnectionResetError:
+        except ConnectionResetError or Exception:
             print(f"\nThe client {current_socket.getpeername()} has disconnected...")
+            self.connected_sockets.remove(current_socket)
+            current_socket.close()
+            
+            if len(self.connected_sockets) != 0:  # check for other connected sockets
+                self.active_client_sockets()
+            else:
+                print("No more clients connected")
+                self.active_client_sockets()
+                
+        except Exception:
             self.connected_sockets.remove(current_socket)
             current_socket.close()
             if len(self.connected_sockets) != 0:  # check for other connected sockets
@@ -553,171 +594,146 @@ class tcp_multiserver():
             else:
                 print("No more clients connected")
                 self.active_client_sockets()
-            """the whole disconnection sequence is triggered from the exception handler, se we will just raise the exception
-                    to close the server socket"""
-        except Exception:
             print("serving client error")
             print(traceback.format_exc())
         else:
             # print(client_data)
 
-            if client_data == "Bye":
-                current_socket.send("bye".encode())
-                print(
-                    "Connection closed",
-                )
-            elif client_data == "ID":
-                id: str = self.config[current_socket.getpeername()[0]]
-                current_socket.send(id.encode())
+            if client_data == "Bye":self.say_bye(current_socket)
+            elif client_data == "ID":self.get_id(current_socket)
+            elif client_data == "META":sample_id = self.send_meta(current_socket, tool)
+            elif client_data == "MEAS":self.meas_prot(current_socket, tool, t, sample_id)
+            elif client_data == "UPDATE":self.update(current_socket, tool)
+            elif (client_data.upper() == "QUIT" or client_data.upper() == "Q"):self.quit(current_socket)
             
-            elif client_data == "MEAS":
-                t: dt  = dt.now()
-                tool = self.config[current_socket.getpeername()[0]]
-                print(f"got message from {tool}")
-                # print("awaitning sample id")
-                current_socket.send("awaiting sampleid".encode())
-                sample_id = current_socket.recv(1024).decode()
-                print(f"got {sample_id} from {tool}")
-                #check if current sample exists
-                found:bool = False
-                i: int = 0
-                current_sample:sample
-                for samp in self.samples:
-                    if samp.id == sample_id:
-                        current_sample = samp
-                        samp.insts[tool] = True
-                        found = True
-                        insts = list(samp.insts.values())
-                        if all(insts):
-                            del self.samples[i]
-                        break
-                    i += 1
-                if not found:
-                    temp_samp:sample = sample()
-                    temp_samp.id = sample_id
-                    temp_samp.insts[tool] = True
-                    self.samples.append(temp_samp)
-                    current_sample = temp_samp
-                    
-                    
-                # for samp in self.samples:
-                    
-                    # print(samp.id)
-                    
-                    # for key in samp.insts:
-                    #     print(key, samp.insts[key])
+            else:
+                tool = current_socket.getpeername()[0]
+                current_socket.send(client_data.encode())
+
+    def update(self, current_socket:socket.socket, tool:str):
+        self.logger.debug(f"{tool} requested sample list")
+        ids: list[str] = []
+        if len(self.samples) != 0:
+            for samp in self.samples:
+                if not samp.insts[tool]:
+                    ids.append(samp.id)
+            msg: str = ",".join(ids)
+        self.logger.debug(f"current samples {msg} need measurent on {tool}")
+        if len(ids) == 0:#if len(ids) == 0:
+            print("No samples to update")
+            msg:str = "None"
+        current_socket.send(msg.encode())
+
+    def quit(self, current_socket:socket.socket):
+        self.logger.debug(f"Closing the socket with client {current_socket.getpeername()} now...")
+        current_socket.send("Bye".encode())
+        
+        self.logger.debug("removing client from active list and closing server side socket")
+        self.connected_sockets.remove(current_socket)
+        current_socket.close()
+        self.logger.debug(" double checking active list")
                 
-                values: list[list[str]]#list[list[str | dt] | list[str]] | list[list[str|float|int]]#list[list[str]] | list[str] 
-  
-                #first get tool to build SQL query with
-                # print(f"awaiting value from {tool}")
-                print(current_sample.description)
-                if current_sample.description == "":
-                    #request sample description
-                    print("awaiting sample description")
-                    current_socket.send("DESC".encode())
-                    current_sample.description = current_socket.recv(32768).decode()
-                values = [
+        if len(self.connected_sockets) != 0:
+            self.active_client_sockets()
+        else:
+            self.active_client_sockets()
+    
+    def send_meta(self, current_socket:socket.socket):
+        self.logger.debug(f"asking for sample id")
+        current_socket.send("awaiting sampleid".encode())
+        sample_id = current_socket.recv(1024).decode()
+        self.logger.debug(f"getting meta data for {sample_id}")
+        samp:sample = self.get_sample(sample_id)
+        
+        self.logger.debug("sending desc to client")
+        
+        current_socket.send(samp.description.encode())
+
+    def meas_prot(self, current_socket:socket.socket, tool:str, t:str):
+        
+        self.logger.debug(f"asking for sample id")
+        current_socket.send("awaiting sampleid".encode())
+        sample_id = current_socket.recv(1024).decode()
+        self.logger.debug(f"{sample_id} is in {tool}")
+        self.logger.debug("acquiring sample object")
+        current_sample = self.get_sample(tool, sample_id)
+                
+        values: list[list[str]]#list[list[str | dt] | list[str]] | list[list[str|float|int]]#list[list[str]] | list[str] 
+
+        current_socket.send("DESC".encode())
+        current_sample.description = current_socket.recv(32768).decode()
+        values = [
                     ["time", str(t)],
                     ["sample_id", sample_id],
                     ["Description", current_sample.description],
                     ]
                               
                 #get value
-                current_socket.send(f"awaiting value from {tool}".encode())
-                value = current_socket.recv(32768).decode()
-                time.sleep(1)
+        current_socket.send(f"awaiting value from {tool}".encode())
+        value = current_socket.recv(32768).decode()
                 # print(f"got  {value}")
                 
                 # confirm
                 # print("Writing back")
-                current_socket.send("data received".encode())
+        current_socket.send("data received".encode())
                 
                 #checks all samples and removes completed samples
 
                 #process
                 
                 #writing to sql server
-                if tool == "fourpp":
-                    values.append(["resistance", value]) 
+        if tool == "fourpp":
+            values.append(["resistance", value]) 
                     
-                    self.SQL.write(tool, values)
+            self.SQL.write(tool, values)
                 
-                if tool == "nearir":
+        if tool == "nearir":
                     #get spectra
-                    wvs: list[str]  = value.split(",")
-                    spec = current_socket.recv(32768).decode()
-                    time.sleep(1)
-                    spec = spec.split(",")
-                    current_socket.send("data received".encode())
-                    i: int = 0
-                    col: list[str] = []
-                    cols: list[str] = [] 
-                    for wv in wvs:
-                        wv2 = wv[:wv.index(".")]
+            wvs: list[str]  = value.split(",")
+            spec = current_socket.recv(32768).decode()
+            time.sleep(1)
+            spec = spec.split(",")
+            current_socket.send("data received".encode())
+            i: int = 0
+            col: list[str] = []
+            cols: list[str] = [] 
+            for wv in wvs:
+                wv2 = wv[:wv.index(".")]
                         # print(wv2)
-                        col = [f"{self.prefixes[tool]}_{wv2}", spec[i]]
-                        values.append(col)
+                col = [f"{self.prefixes[tool]}_{wv2}", spec[i]]
+                values.append(col)
                         
-                        cols.append(f"{wv2}")
-                        i += 1
+                cols.append(f"{wv2}")
+                i += 1
                     #check if each wavelenght has a col
                     
-                    self.SQL.check_columns(tool, (",").join(cols))
+            self.SQL.check_columns(tool, (",").join(cols))
                     
-                    self.SQL.write(tool, values)
+            self.SQL.write(tool, values)
                     
-                if tool == "hall":
-                    data = value.split(",")
-                    i = 0
-                    for sql_col in self.SQL.hall_cols:
-                        values.append([sql_col, data[i]])
-                        i += 1
+        if tool == "hall":
+            data = value.split(",")
+            i = 0
+            for sql_col in self.SQL.hall_cols:
+                values.append([sql_col, data[i]])
+                i += 1
                     
                     # value = float(value)
                     # values.append(["nb", str(value)])
                     
                     
                     
-                    self.SQL.write(tool, values)
-                    
-            elif client_data == "UPDATE":
-                #update the requested tools drop down list of samples that need measured
-                tool = self.config[current_socket.getpeername()[0]]
-                ids: list[str] = []
-                if len(self.samples) != 0:
-                    for samp in self.samples:
-                        if not samp.insts[tool]:
-                            ids.append(samp.id)
-                            # print(samp.id)
-                    msg: str = ",".join(ids)
+            self.SQL.write(tool, values)
 
-                if len(ids) == 0:#if len(ids) == 0:
-                    print("No samples to update")
-                    msg:str = "None"
-                current_socket.send(msg.encode())
-                
-            elif (
-                client_data.upper() == "QUIT" or client_data.upper() == "Q"
-            ):  # close connection with the client and close socket
-                print(
-                    f"Closing the socket with client {current_socket.getpeername()} now..."
+    def say_bye(self, current_socket):
+        current_socket.send("bye".encode())
+        print(
+                    "Connection closed",
                 )
-                current_socket.send("Bye".encode())
-                # tell the client we accepted his request to disconnect, also disconnect the client from their side
-                self.connected_sockets.remove(current_socket)
-                current_socket.close()
-                if len(self.connected_sockets) != 0:
-                    self.active_client_sockets()
-                else:
-                    print("No more clients connected")
-                    self.active_client_sockets()
-                """the whole disconnection sequence is triggered from the exception handler, se we will just raise the exception
-                    to close the server socket"""
-            
-            else:
-                tool = current_socket.getpeername()[0]
-                current_socket.send(client_data.encode())
+
+    def get_id(self, current_socket):
+        id: str = self.config[current_socket.getpeername()[0]]
+        current_socket.send(id.encode())
              #   print("Responded by: Sending the message back to the client")   
         
     def server(self):
@@ -726,7 +742,7 @@ class tcp_multiserver():
         try:
             self.server_socket.bind(self.ADDR)  
         except OSError:
-            pass
+            traceback.print_exc()
         self.server_socket.listen()
         self.retries = 0
         print("\n* Server is ON *\n")
@@ -761,24 +777,6 @@ class tcp_multiserver():
                 self.server_socket.close()
                 
                 self.server()
-                #restart listening loop
-                
-                
-                # while len(self.connected_sockets) == 0:#while waiting for new clients
-                    
-                                # ready_to_read, _, _ = select.select(
-                                # [self.server_socket] + self.connected_sockets, [], []
-                                # )
-                                
-                                # for current_socket in ready_to_read:
-                                #     if (
-                                #         current_socket is self.server_socket
-                                #     ):  # if the current socket is the new socket we receive from the server
-                                #         (client_socket, client_address) = current_socket.accept()
-                                #         print("\nNew client joined!", client_address)
-                                #         self.connected_sockets.append(client_socket)
-                                #         self.active_client_sockets()
-                                #         continue
             except KeyboardInterrupt:
                 self.all_sockets_closed()
             except Exception:
