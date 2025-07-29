@@ -113,7 +113,7 @@ class sample():
         
         self.id:str = ""
         
-        self.description: str = ""
+        self.description: str = "None"
         
         self.insts = {
             'fourpp': False,
@@ -177,7 +177,11 @@ class sql_client():
         self.prefixes: dict[str,str] = {
             
         }
-
+        #logging
+        class_name = str(type(self))
+        name = class_name.split(" ")[-1][:-1].replace("'", "")
+        self.logger = logging.getLogger(name)
+        self.logger.info("Server initalized")
     
     def load_config(self):
         '''
@@ -287,28 +291,69 @@ class sql_client():
                 # print(query)
                 self.cursor.execute(query)
                 self.sql.commit()
-                   
+    
+    def table_query_builder(self, tool:str, prefix:str, cols:list[str], data_types:list[str], data_sizes:list[str]) -> str:
+        """ used to build table generating queries for SQL
+
+        Args:
+            tool (str):name of tool, gives name of table
+            prefix (str): prefix that goes in front of the columns
+            cols (list[str]): column names
+            data_types (list[str]): each columns data type
+            data_sizes (list[str]): each columns data size
+
+        Returns:
+            str: argument for self.cursor.execute()
+        """
+        query_pre:str = f"CREATE TABLE {tool} ("
+
+        query_as_list = []
+        i = 0 
+
+        for col in cols:
+            temp = f"{prefix}_{col} {data_types[i]}({data_sizes[i]})"
+            query_as_list.append(temp)
+            i += 1
+            
+            
+        query_col = ",".join(query_as_list)
+        query = f"{query_pre} {query_col})"
+
+        return query
+
+    
+                        
+    
     def check_tables(self):
         '''
         using tools from config file checks if corres. table exist, if not makes them
         '''
+        self.logger.info("checking tables and building missing")
         temp: pyodbc.Cursor|None = None
         temp = self.cursor.execute("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'")
         self.tables = [x[2] for x in temp]
         hall_name:str = ""
+        cols = ["sample_id", "pos", "time", "description"]
+        sizes = ["255"] * 4
+        sizes.append("8000")
+        data_types = ["VARCHAR"] * 4
         for tool in self.tools:
             if tool == "hall":hall_name = tool
+            
             if tool not in self.tables:
                 if tool == "fourpp":
-                    self.cursor.execute(f"CREATE TABLE {tool} ({self.prefixes[tool]}_time VARCHAR(255), {self.prefixes[tool]}_resistance VARCHAR(255), {self.prefixes[tool]}_sample_id VARCHAR(255))")
+                    fourpp_cols = cols.copy()
+                    fourpp_cols.append("Resistance")
+                    sizes.append("255")
+                    data_types.append("VARCHAR")
+                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],fourpp_cols,data_types,sizes))
                 if tool == "nearir":
-                    self.cursor.execute(f"CREATE TABLE {tool} ({self.prefixes[tool]}_time VARCHAR(255), {self.prefixes[tool]}_sample_id VARCHAR(255))")
+                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],fourpp_cols,data_types,sizes))
                 if tool == "hall":
-                    self.cursor.execute(f"CREATE TABLE {tool} ({self.prefixes[tool]}_time VARCHAR(255), {self.prefixes[tool]}_sample_id VARCHAR(255))")
+                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],fourpp_cols,data_types,sizes))
                 if tool == "rdt":
-                    self.cursor.execute(f"CREATE TABLE {tool} ({self.prefixes[tool]}_time VARCHAR(255), {self.prefixes[tool]}_sample_id VARCHAR(255), {self.prefixes[tool]}_value VARCHAR(255))")
-                if tool == "test":
-                    self.cursor.execute(f"CREATE TABLE {tool} (t_time VARCHAR(255), t_sample_id VARCHAR(255))")
+                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],fourpp_cols,data_types,sizes))
+        
         self.sql.commit()
         
         time.sleep(1) #wait for sql changes to come in
@@ -400,7 +445,7 @@ class sql_client():
 
 class tcp_multiserver():
     
-    def __init__(self, config:str , ip:str , port:int, gui:Any, max_connections:int = 5,):#, bus_out:"Queue[Any]" , bus_in:"Queue[Any]", max_connections:int = 5):
+    def __init__(self, config:str, ip:str, port:int, gui:Any, max_connections:int = 5):#, bus_out:"Queue[Any]" , bus_in:"Queue[Any]", max_connections:int = 5):
         """_summary_        class for handing multithreaded operation of a tcp server, handles communication to all intrument computer,\n
         to sql servers, and displaying information on the gu
 
@@ -413,7 +458,7 @@ class tcp_multiserver():
             max_connections (int, optional): number of connections allowed to server. Defaults to 5.
         """
         self.ADDR: tuple[str, int] = (ip, port)
-        # print(self.ADDR)
+        print(self.ADDR)
         self.max_connections: int = max_connections
         self.server_socket: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connected_sockets: list[socket.socket] = []  # list of the client sockets being connected
@@ -456,6 +501,7 @@ class tcp_multiserver():
         return
         
     def get_sample(self, tool, sample_id):
+            self.logger.debug(f"searching for {sample_id}")
             found:bool = False
             i: int = 0
             current_sample:sample
@@ -466,10 +512,13 @@ class tcp_multiserver():
                     found = True
                     insts = list(samp.insts.values())
                     if all(insts):
+                        self.logger.debug(f" all measurements for {sample_id}, removing sample from local mem")
                         del self.samples[i]
+                    self.logger.debug(f"found {sample_id}")
                     break
                 i += 1
             if not found:
+                self.logger.debug(f"{sample_id} not found creating new sample object")
                 temp_samp:sample = sample()
                 temp_samp.id = sample_id
                 temp_samp.insts[tool] = True
@@ -544,16 +593,16 @@ class tcp_multiserver():
     
     def serve_client(self, current_socket : socket.socket):
         '''Takes the msg received from the client and handles it accordingly'''
-        self.logger.debug("getting meta data for server side functions")
+        t: dt  = dt.now()
         try:               
-            tool = self.config[current_socket.getpeername()[0]]
+            self.tool = self.config[current_socket.getpeername()[0]]
+            self.logger.debug(f"servering client {current_socket.getpeername()[0]}")
         except KeyError:
             # client_data = "Tool not found" ### UNCOMMENT FOR DEPLOYMENT COMMENTED FOR DEBUGGING
-            self.logger.error(f"{tool} not found please add to config")
-        t: dt  = dt.now()
-        self.logger.debug(f"got message from {tool} at {t}")
+            self.logger.error(f"{self.tool} not found please add to config")
         try:
-            client_data = current_socket.recv(1024).decode()
+            client_data:str = current_socket.recv(1024).decode()
+            self.logger.debug(f"got message from {self.tool} at {t}")
             #client has 3 tries to send something
             zero_byte_count:int = 0
             while zero_byte_count < 3:
@@ -598,18 +647,19 @@ class tcp_multiserver():
             print(traceback.format_exc())
         else:
             # print(client_data)
-
-            if client_data == "Bye":self.say_bye(current_socket)
-            elif client_data == "ID":self.get_id(current_socket)
-            elif client_data == "META":sample_id = self.send_meta(current_socket, tool)
-            elif client_data == "MEAS":self.meas_prot(current_socket, tool, t, sample_id)
-            elif client_data == "UPDATE":self.update(current_socket, tool)
-            elif (client_data.upper() == "QUIT" or client_data.upper() == "Q"):self.quit(current_socket)
-            
-            else:
-                tool = current_socket.getpeername()[0]
-                current_socket.send(client_data.encode())
-
+            try:
+                if (client_data == "Bye" or client_data.upper() == "QUIT" or client_data.upper() == "Q"):self.disconnect_socket(current_socket)
+                elif client_data == "ID":self.get_id(current_socket)
+                elif client_data == "META":sample_id = self.send_meta(current_socket, self.tool)
+                elif client_data == "MEAS":self.meas_prot(current_socket, self.tool, t)
+                elif client_data == "UPDATE":self.update(current_socket, self.tool)
+                
+                else:
+                    self.tool = current_socket.getpeername()[0]
+                    current_socket.send(client_data.encode())
+            except ConnectionResetError:
+                self.connected_sockets.remove(current_socket)
+                
     def update(self, current_socket:socket.socket, tool:str):
         self.logger.debug(f"{tool} requested sample list")
         ids: list[str] = []
@@ -618,16 +668,16 @@ class tcp_multiserver():
                 if not samp.insts[tool]:
                     ids.append(samp.id)
             msg: str = ",".join(ids)
-        self.logger.debug(f"current samples {msg} need measurent on {tool}")
         if len(ids) == 0:#if len(ids) == 0:
             print("No samples to update")
             msg:str = "None"
+        self.logger.debug(f"current samples {msg} need measurent on {tool}")
         current_socket.send(msg.encode())
 
-    def quit(self, current_socket:socket.socket):
+    def disconnect_socket(self, current_socket:socket.socket):
         self.logger.debug(f"Closing the socket with client {current_socket.getpeername()} now...")
         current_socket.send("Bye".encode())
-        
+        current_socket.recv(1024)
         self.logger.debug("removing client from active list and closing server side socket")
         self.connected_sockets.remove(current_socket)
         current_socket.close()
@@ -638,15 +688,15 @@ class tcp_multiserver():
         else:
             self.active_client_sockets()
     
-    def send_meta(self, current_socket:socket.socket):
+    def send_meta(self, current_socket:socket.socket, tool:str):
         self.logger.debug(f"asking for sample id")
         current_socket.send("awaiting sampleid".encode())
         sample_id = current_socket.recv(1024).decode()
+        self.logger.debug(f"sample {sample_id} is in {tool}")
         self.logger.debug(f"getting meta data for {sample_id}")
-        samp:sample = self.get_sample(sample_id)
+        samp:sample = self.get_sample(tool, sample_id)
         
-        self.logger.debug("sending desc to client")
-        
+        self.logger.debug("sending description to client")
         current_socket.send(samp.description.encode())
 
     def meas_prot(self, current_socket:socket.socket, tool:str, t:str):
@@ -657,11 +707,12 @@ class tcp_multiserver():
         self.logger.debug(f"{sample_id} is in {tool}")
         self.logger.debug("acquiring sample object")
         current_sample = self.get_sample(tool, sample_id)
-                
+            
         values: list[list[str]]#list[list[str | dt] | list[str]] | list[list[str|float|int]]#list[list[str]] | list[str] 
 
-        current_socket.send("DESC".encode())
-        current_sample.description = current_socket.recv(32768).decode()
+        current_socket.send("send description please".encode())
+        current_sample.description = current_socket.recv(1024).decode()
+        self.logger.debug(f"recv {current_sample.description}")
         values = [
                     ["time", str(t)],
                     ["sample_id", sample_id],
@@ -724,13 +775,7 @@ class tcp_multiserver():
                     
                     
             self.SQL.write(tool, values)
-
-    def say_bye(self, current_socket):
-        current_socket.send("bye".encode())
-        print(
-                    "Connection closed",
-                )
-
+        
     def get_id(self, current_socket):
         id: str = self.config[current_socket.getpeername()[0]]
         current_socket.send(id.encode())
@@ -740,6 +785,7 @@ class tcp_multiserver():
         """server setup and socket handling"""
         print("Setting up server...")
         try:
+            self.logger.debug(f"setting up server at {self.ADDR}")
             self.server_socket.bind(self.ADDR)  
         except OSError:
             traceback.print_exc()
@@ -772,16 +818,17 @@ class tcp_multiserver():
                     time.sleep(1)
                     self.retries += 1
                 #all retries failed hard restarting server
-                traceback.print_exc()
+                # traceback.print_exc()
                 print(" VALUE ERROR")
                 self.server_socket.close()
                 
                 self.server()
             except KeyboardInterrupt:
                 self.all_sockets_closed()
+                
             except Exception:
                 print("Server issue")
-                print(traceback.format_exc())
+                # print(traceback.format_exc())
                 while self.retries < 5:
                     self.server()
                     time.sleep(1)
