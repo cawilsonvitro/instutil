@@ -15,8 +15,6 @@ import logging
 import os
 import csv
 #endregion 
-#region logging
-#endregion
 #region functions
 
 def strip_space(string_in: str) -> list[str]:
