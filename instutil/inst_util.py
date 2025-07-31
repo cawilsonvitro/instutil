@@ -8,7 +8,6 @@ import select
 from multiprocessing import Process, Queue #type:ignore
 from queue import Empty #type:ignore
 from typing import Any #type:ignore
-import json #type:ignore
 from datetime import datetime as dt
 import traceback
 import logging
@@ -46,16 +45,15 @@ def strip_space(string_in: str) -> list[str]:
     return no_space
 
 def parse(filepath:str) -> tuple[list[str],list[str]]:
-    """_summary_takes HMS3000 files and gives a list of headers and data
+    """
+    Parses HMS3000 data files and returns a list of headers and data.
 
     Args:
-        filepath (str):  path to HMS 3000 data file
+        filepath (str): Path to the HMS 3000 data file.
 
     Returns:
-        tuple[list[str],list[str]]: outputs headers then data such that all normal values happen first then all -I then
-        all values with +I
+        tuple[list[str], list[str]]: A tuple containing a list of headers and a list of data values.
     """
-    i = 0
     headers: list[str]= []
     datas: list[str] = []
 
@@ -499,30 +497,30 @@ class tcp_multiserver():
         return
         
     def get_sample(self, tool, sample_id):
-            self.logger.debug(f"searching for {sample_id}")
-            found:bool = False
-            i: int = 0
-            current_sample:sample
-            for samp in self.samples:
-                if samp.id == sample_id:
-                    current_sample = samp
-                    samp.insts[tool] = True
-                    found = True
-                    insts = list(samp.insts.values())
-                    if all(insts):
-                        self.logger.debug(f" all measurements for {sample_id}, removing sample from local mem")
-                        del self.samples[i]
-                    self.logger.debug(f"found {sample_id}")
-                    break
-                i += 1
-            if not found:
-                self.logger.debug(f"{sample_id} not found creating new sample object")
-                temp_samp:sample = sample()
-                temp_samp.id = sample_id
-                temp_samp.insts[tool] = True
-                self.samples.append(temp_samp)
-                current_sample = temp_samp
-            return current_sample
+        self.logger.debug(f"searching for {sample_id}")
+        found: bool = False
+        i: int = 0
+        current_sample: sample
+        for samp in self.samples:
+            if samp.id == sample_id:
+                current_sample = samp
+                samp.insts[tool] = True
+                found = True
+                insts = list(samp.insts.values())
+                if all(insts):
+                    self.logger.debug(f" all measurements for {sample_id}, removing sample from local mem")
+                    del self.samples[i]
+                self.logger.debug(f"found {sample_id}")
+                break
+            i += 1
+        if not found:
+            self.logger.debug(f"{sample_id} not found creating new sample object")
+            temp_samp: sample = sample()
+            temp_samp.id = sample_id
+            temp_samp.insts[tool] = True
+            self.samples.append(temp_samp)
+            current_sample = temp_samp
+        return current_sample
 
     
     def SQL_startup(self):
@@ -622,20 +620,11 @@ class tcp_multiserver():
             )
             print(client_data)
 
-        except ConnectionResetError or Exception:
+        except (ConnectionResetError, Exception):
             print(f"\nThe client {current_socket.getpeername()} has disconnected...")
             self.connected_sockets.remove(current_socket)
             current_socket.close()
             
-            if len(self.connected_sockets) != 0:  # check for other connected sockets
-                self.active_client_sockets()
-            else:
-                print("No more clients connected")
-                self.active_client_sockets()
-                
-        except Exception:
-            self.connected_sockets.remove(current_socket)
-            current_socket.close()
             if len(self.connected_sockets) != 0:  # check for other connected sockets
                 self.active_client_sockets()
             else:
