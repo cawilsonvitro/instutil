@@ -8,13 +8,27 @@ import select
 from multiprocessing import Process, Queue #type:ignore
 from queue import Empty #type:ignore
 from typing import Any #type:ignore
+import json #type:ignore
 from datetime import datetime as dt
 import traceback
 import logging
 import os
 import csv
 #endregion 
+#region logging
+#endregion
 #region functions
+
+def get_args_as_dict(sys_args:str) -> dict[str, str]:
+    argsin = [
+    i.split("=") for i in sys_args
+    ]
+    dictout = {}
+    for t in argsin:
+        dictout[t[0]] = t[1]
+
+    return dictout
+
 
 def strip_space(string_in: str) -> list[str]:
     """_summary_ removes extra spaces from HMS 3000 output files
@@ -45,15 +59,16 @@ def strip_space(string_in: str) -> list[str]:
     return no_space
 
 def parse(filepath:str) -> tuple[list[str],list[str]]:
-    """
-    Parses HMS3000 data files and returns a list of headers and data.
+    """_summary_takes HMS3000 files and gives a list of headers and data
 
     Args:
-        filepath (str): Path to the HMS 3000 data file.
+        filepath (str):  path to HMS 3000 data file
 
     Returns:
-        tuple[list[str], list[str]]: A tuple containing a list of headers and a list of data values.
+        tuple[list[str],list[str]]: outputs headers then data such that all normal values happen first then all -I then
+        all values with +I
     """
+    i = 0
     headers: list[str]= []
     datas: list[str] = []
 
@@ -497,30 +512,30 @@ class tcp_multiserver():
         return
         
     def get_sample(self, tool, sample_id):
-        self.logger.debug(f"searching for {sample_id}")
-        found: bool = False
-        i: int = 0
-        current_sample: sample
-        for samp in self.samples:
-            if samp.id == sample_id:
-                current_sample = samp
-                samp.insts[tool] = True
-                found = True
-                insts = list(samp.insts.values())
-                if all(insts):
-                    self.logger.debug(f" all measurements for {sample_id}, removing sample from local mem")
-                    del self.samples[i]
-                self.logger.debug(f"found {sample_id}")
-                break
-            i += 1
-        if not found:
-            self.logger.debug(f"{sample_id} not found creating new sample object")
-            temp_samp: sample = sample()
-            temp_samp.id = sample_id
-            temp_samp.insts[tool] = True
-            self.samples.append(temp_samp)
-            current_sample = temp_samp
-        return current_sample
+            self.logger.debug(f"searching for {sample_id}")
+            found:bool = False
+            i: int = 0
+            current_sample:sample
+            for samp in self.samples:
+                if samp.id == sample_id:
+                    current_sample = samp
+                    samp.insts[tool] = True
+                    found = True
+                    insts = list(samp.insts.values())
+                    if all(insts):
+                        self.logger.debug(f" all measurements for {sample_id}, removing sample from local mem")
+                        del self.samples[i]
+                    self.logger.debug(f"found {sample_id}")
+                    break
+                i += 1
+            if not found:
+                self.logger.debug(f"{sample_id} not found creating new sample object")
+                temp_samp:sample = sample()
+                temp_samp.id = sample_id
+                temp_samp.insts[tool] = True
+                self.samples.append(temp_samp)
+                current_sample = temp_samp
+            return current_sample
 
     
     def SQL_startup(self):
@@ -539,7 +554,7 @@ class tcp_multiserver():
         return
           
     def connections(self, host:str = "8.8.8.8", port: int = 53, timeout: int = 30):
-        """        checks the c onnection to the internet as well as connection to the db, if the db connection fails
+        """        checks the connection to the internet as well as connection to the db, if the db connection fails
         it attempts to reconnect
         
 
@@ -592,7 +607,7 @@ class tcp_multiserver():
         t: dt  = dt.now()
         try:               
             self.tool = self.config[current_socket.getpeername()[0]]
-            self.logger.debug(f"servering client {current_socket.getpeername()[0]}")
+            self.logger.debug(f"serving client {current_socket.getpeername()[0]}")
         except KeyError:
             # client_data = "Tool not found" ### UNCOMMENT FOR DEPLOYMENT COMMENTED FOR DEBUGGING
             self.logger.error(f"{self.tool} not found please add to config")
@@ -620,11 +635,20 @@ class tcp_multiserver():
             )
             print(client_data)
 
-        except (ConnectionResetError, Exception):
+        except ConnectionResetError or Exception:
             print(f"\nThe client {current_socket.getpeername()} has disconnected...")
             self.connected_sockets.remove(current_socket)
             current_socket.close()
             
+            if len(self.connected_sockets) != 0:  # check for other connected sockets
+                self.active_client_sockets()
+            else:
+                print("No more clients connected")
+                self.active_client_sockets()
+                
+        except Exception:
+            self.connected_sockets.remove(current_socket)
+            current_socket.close()
             if len(self.connected_sockets) != 0:  # check for other connected sockets
                 self.active_client_sockets()
             else:
@@ -677,15 +701,26 @@ class tcp_multiserver():
     
     def send_meta(self, current_socket:socket.socket, tool:str):
         self.logger.debug(f"asking for sample id")
+        
         current_socket.send("awaiting sampleid".encode())
         sample_id = current_socket.recv(1024).decode()
+        
         self.logger.debug(f"sample {sample_id} is in {tool}")
         self.logger.debug(f"getting meta data for {sample_id}")
-        samp:sample = self.get_sample(tool, sample_id)
         
+        self.logger.debug("asking position")
+        
+        current_socket.send("pos".encode())
+        self.pos = current_socket.recv(1024).decode()
+        
+        self.logger.debug(f"got position {self.pos}")
+        samp:sample = self.get_sample(tool, sample_id)
         self.logger.debug("sending description to client")
+        
         current_socket.send(samp.description.encode())
-
+        self.logger.debug(f"sent {samp.description} to client")
+        
+   
     def meas_prot(self, current_socket:socket.socket, tool:str, t:str):
         
         self.logger.debug(f"asking for sample id")
@@ -693,40 +728,33 @@ class tcp_multiserver():
         sample_id = current_socket.recv(1024).decode()
         self.logger.debug(f"{sample_id} is in {tool}")
         self.logger.debug("acquiring sample object")
-        current_sample = self.get_sample(tool, sample_id)
+        current_sample:sample = self.get_sample(tool, sample_id)
             
         values: list[list[str]]#list[list[str | dt] | list[str]] | list[list[str|float|int]]#list[list[str]] | list[str] 
-
+        
         current_socket.send("send description please".encode())
         current_sample.description = current_socket.recv(1024).decode()
+        
+        
         self.logger.debug(f"recv {current_sample.description}")
         values = [
                     ["time", str(t)],
                     ["sample_id", sample_id],
                     ["Description", current_sample.description],
+                    ["pos", self.pos]
                     ]
                               
-                #get value
         current_socket.send(f"awaiting value from {tool}".encode())
         value = current_socket.recv(32768).decode()
-                # print(f"got  {value}")
-                
-                # confirm
-                # print("Writing back")
-        current_socket.send("data received".encode())
-                
-                #checks all samples and removes completed samples
 
-                #process
-                
-                #writing to sql server
+        current_socket.send("data received".encode())
+
         if tool == "fourpp":
             values.append(["resistance", value]) 
                     
             self.SQL.write(tool, values)
                 
         if tool == "nearir":
-                    #get spectra
             wvs: list[str]  = value.split(",")
             spec = current_socket.recv(32768).decode()
             time.sleep(1)
@@ -963,10 +991,13 @@ class FileManager:
         file_name = f"{self.path}\\{sample_num}_{self.tool}_{self.date}.csv"
         self.logger.debug(f"writing data to file {file_name}")
         with open(file_name, "w") as f:
-            writer = csv.writer(f)
+            writer = csv.writer(f, delimiter=",")
             writer.writerow(header)
-            for row in data:
-                writer.writerow(row)
+            if isinstance(data[0], list):
+                for row in data:
+                    writer.writerow(row)
+            else:
+                writer.writerow(data)
         self.logger.debug(f"data written to file {file_name}")
 #endregion
     
