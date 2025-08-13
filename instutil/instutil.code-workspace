@@ -2,6 +2,9 @@
 	"folders": [
 		{
 			"path": ".."
+		},
+		{
+			"path": "../../../pck_update_workflow"
 		}
 	],
 	"settings": {

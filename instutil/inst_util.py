@@ -359,12 +359,12 @@ class sql_client():
                     data_types.append("VARCHAR")
                     self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],fourpp_cols,data_types,sizes))
                 if tool == "nearir":
-                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],fourpp_cols,data_types,sizes))
+                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],cols,data_types,sizes))
                 if tool == "hall":
-                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],fourpp_cols,data_types,sizes))
+                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],cols,data_types,sizes))
                 if tool == "rdt":
-                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],fourpp_cols,data_types,sizes))
-        
+                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],cols,data_types,sizes))
+
         self.sql.commit()
         
         time.sleep(1) #wait for sql changes to come in
@@ -1005,3 +1005,5 @@ class FileManager:
 
 
     
+if __name__ == "__main__":
+    # sql_client = SQLClient()
