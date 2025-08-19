@@ -31,7 +31,10 @@
     },
     "fourpp":{
             "resource_string":"USB0::0xF4EC::0x1208::SDM36HCD801150::INSTR",
-            "sample_count": "30"
+            "sample_count": "30",
+            "db":{
+                "resistance": "VARCHAR(255)"
+            }
     },
     "Database_Config":{
         "host": "localhost",
@@ -41,8 +44,7 @@
             "sample_id": "VARCHAR(255)",
             "pos":"VARCHAR(255)",
             "time":"VARCHAR(255)",
-            "operator_id":"VARCHAR(255)",
-            "Description":"VARCHAR(8000)"
+            "description":"VARCHAR(8000)"
         }
     },
     "Tool_pre": {

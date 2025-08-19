@@ -205,6 +205,8 @@ class sql_client():
         '''
         with open(self.config_path, 'r') as file:
             config: dict[str, dict[str, str]]  = json.load(file)
+            self.fpp_db_config = config["fourpp"]["db"]
+            print(self.fpp_db_config)
             self.hall_sys: str = config["Hall"]["sys"]
             self.config_db: dict[str,str] = config["Database_Config"]
             self.config_tools: dict[str,str] = config["Tool_ip"]
@@ -221,10 +223,16 @@ class sql_client():
         col_dict = self.config_db["default_col"]
         self.def_col_names = []
         self.def_col_sizes = []
+        self.fpp_col_names = []
+        self.fpp_col_sizes = []
+        
         for key, value in col_dict.items():
             self.def_col_names.append(key)
             self.def_col_sizes.append(value)
         self.col_flags = [False] * len(self.tools)
+        for key, value in self.fpp_db_config.items():
+                self.fpp_col_names.append(key)
+                self.fpp_col_sizes.append(value)
     def connect(self):
         '''
         connects to sql server using configuration from json file\n
@@ -362,17 +370,29 @@ class sql_client():
         temp = self.cursor.execute("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'")
         self.tables = [x[2] for x in temp]
         hall_name:str = ""
-        cols = self.def_col_names#["sample_id", "pos", "time", "description"]
-        sizes = self.def_col_sizes#["255"] * 4
+        cols = self.def_col_names.copy()#["sample_id", "pos", "time", "description"]
+        sizes = self.def_col_sizes.copy()#["255"] * 4
         #sizes.append("8000")
         #data_types = ["VARCHAR"] * 4
-        for tool in self.tools:
+        #removing debugging and hosting tools
+        tools = [i for i in self.tools if i != "host" and i != "testing"]
+        
+        for tool in tools:
+            cols = self.def_col_names.copy()
+            sizes = self.def_col_sizes.copy()
+            
             if tool == "hall":hall_name = tool #seems unneeded but the var is used
             
             if tool not in self.tables:
-                if tool != "host" and tool != "testing":
-                    query = self.table_query_builder(tool,self.prefixes[tool],cols,sizes,[])
-                    self.cursor.execute(query)
+                if tool == "fourpp":
+                    k = 0
+                    for name in self.fpp_col_names:
+                        cols.append(name)
+                        sizes.append(self.fpp_col_sizes[k])
+                        k += 1
+                        
+                query = self.table_query_builder(tool,self.prefixes[tool],cols,sizes,[])
+                self.cursor.execute(query)
 
         self.sql.commit()
         
@@ -383,7 +403,11 @@ class sql_client():
             #self.hall_cols,_ = parse(r"sample_file.txt")
             self.hall_cols = ['DATE', 'User_Name', 'Sample_Name', 'I(mA)', 'B', 'D', 'D_T', 'MN', 'T(K)', 'Nb', 'u', 'rho', 'RH', 'RHA', 'RHB', 'NS', 'SIGMA', 'DELTA', 'ALPHA', 'Vab+I', 'Vbc+I', 'Vac+I', 'Vmac+I', 'V-mac+I', 'Vcd+I', 'Vda+I', 'Vbd+I', 'Vmbd+I', 'V-mbd', 'Vab-I', 'Vbc-I', 'Vac-I', 'Vmac-I', 'V-mac-I', 'Vcd-I', 'Vda-I', 'Vbd-I', 'Vmbd-I', 'Rs']
             self.check_columns(hall_name, (",").join(self.hall_cols))                    
-                   
+        
+        #checking that extra cols got added for other 4 tools
+       
+
+
     def check_for_illegals(self, col_name: str) -> bool:
         """_summary_ checks for sql banned chars in col name
 
@@ -1019,3 +1043,11 @@ if __name__ == "__main__":
     sqltest.load_config()
     sqltest.connect()
     sqltest.check_tables()
+    test_vals = [
+        ["fpp_sample_id", "test_sample"],
+        ["fpp_pos", "test_pos"],
+        ["fpp_time", "test_time"],
+        ["fpp_description", "test_description"],
+        ["fpp_resistance", "test_resistance"]
+        ]
+    sqltest.write("fourpp", test_vals)
