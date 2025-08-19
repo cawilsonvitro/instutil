@@ -20,6 +20,19 @@ import csv
 #region functions
 
 def get_args_as_dict(sys_args:str) -> dict[str, str]:
+    """
+    Converts a list of command-line arguments in the form "key=value" into a dictionary.
+    Args:
+        sys_args (str): A list of strings, each formatted as "key=value".
+    Returns:
+        dict[str, str]: A dictionary mapping each key to its corresponding value.
+    Raises:
+        IndexError: If any argument does not contain an '=' character.
+        ValueError: If the input is not iterable or not formatted as expected.
+    Example:
+        >>> get_args_as_dict(["foo=bar", "baz=qux"])
+        {'foo': 'bar', 'baz': 'qux'}
+    """
     argsin = [
     i.split("=") for i in sys_args
     ]
@@ -31,14 +44,17 @@ def get_args_as_dict(sys_args:str) -> dict[str, str]:
 
 
 def strip_space(string_in: str) -> list[str]:
-    """_summary_ removes extra spaces from HMS 3000 output files
-
-    Args:
-        string_in (str):string that is then broken up without spaces
-
-    Returns:
-        list[str]: a list of strings delimeted by spaces and then put into list
     """
+    Removes spaces from the input string and returns a list of words.
+    Args:
+        string_in (str): The input string to process.
+    Returns:
+        list[str]: A list of words from the input string, with spaces removed.
+    Example:
+        >>> strip_space("hello world  test")
+        ['hello', 'world', 'test']
+    """
+
     no_space: list[str] = []
     word = ""
     i = 0
@@ -59,15 +75,20 @@ def strip_space(string_in: str) -> list[str]:
     return no_space
 
 def parse(filepath:str) -> tuple[list[str],list[str]]:
-    """_summary_takes HMS3000 files and gives a list of headers and data
-
-    Args:
-        filepath (str):  path to HMS 3000 data file
-
-    Returns:
-        tuple[list[str],list[str]]: outputs headers then data such that all normal values happen first then all -I then
-        all values with +I
     """
+    Parses a file to extract header and data information.
+    The function reads the specified file line by line, processes each line to separate headers and data,
+    and performs specific transformations on the headers between indices 19 and 28. It also removes or modifies
+    certain header entries based on their positions.
+    Args:
+        filepath (str): The path to the file to be parsed.
+    Returns:
+        tuple[list[str], list[str]]: A tuple containing two lists:
+            - The first list contains the processed headers.
+            - The second list contains the extracted data entries.
+    """
+
+
     i = 0
     headers: list[str]= []
     datas: list[str] = []
@@ -117,6 +138,18 @@ def parse(filepath:str) -> tuple[list[str],list[str]]:
 #region classes
 
 class sample():
+    """
+    Represents a sample and tracks its measurement status and associated instruments.
+    Attributes:
+        id (str): Identifier for the sample.
+        description (str): Description of the sample.
+        insts (dict): Dictionary tracking whether each instrument ('fourpp', 'nearir', 'rdt', 'hall') has been used.
+        test (bool): If True, indicates that the sample has been tested regardless of instrument status.
+    Methods:
+        check() -> bool:
+            Checks if all instruments have performed a measurement or if the test flag is set.
+            Returns True if all measurements are done or test is True, otherwise False.
+    """
     def __init__(self):
         """_summary_         main use is to keep track of sample measurements and current sample id\n
         keeps track of what inst has been used using a dict
@@ -150,6 +183,51 @@ class sample():
         return True
 
 class sql_client():
+    """
+    A client class for managing SQL database connections, table creation, column validation, and data insertion
+    using configuration from a JSON file.
+    Attributes:
+        host (str): SQL server host address.
+        user (str): Username for SQL server authentication.
+        pw (str): Password for SQL server authentication.
+        db (str): Database name to connect to.
+        config_path (str): Path to the configuration JSON file.
+        config_db (dict[str, str]): Database configuration loaded from the config file.
+        config_tools (dict[str, str]): Tool IP configuration loaded from the config file.
+        hall_sys (str): Hall system identifier.
+        sql (pyodbc.Connection): Active SQL connection object.
+        cursor (pyodbc.Cursor): Cursor object for executing SQL queries.
+        tools (list[str]): List of tool names from the configuration.
+        tables (list[str]): List of table names in the database.
+        missing_col_error (str): Error code for missing columns.
+        illegal_char (list[str]): List of illegal characters for column names.
+        illegal_val (list[str]): List of illegal values for data validation.
+        hall_cols (list[str]): List of hall column names.
+        col_flags (list[bool]): Flags for column checks.
+        prefixes (dict[str, str]): Prefixes for table columns.
+        logger (logging.Logger): Logger instance for the class.
+    Methods:
+        __init__(config_path: str) -> None:
+            Initializes the sql_client instance with the given configuration path.
+        load_config():
+            Loads database and tool configuration from the JSON config file.
+        connect():
+            Establishes a connection to the SQL server and ensures the target database exists.
+        check_columns(table: str, columns: str) -> None:
+            Checks if the specified columns exist in the given table, and adds them if missing.
+        table_query_builder(tool: str, prefix: str, cols: list[str], data_types: list[str], data_sizes: list[str]) -> str:
+            Builds a SQL query string for creating a table with the specified columns and data types.
+        check_tables():
+            Checks for the existence of required tables and creates them if they do not exist.
+        check_for_illegals(col_name: str) -> bool:
+            Checks if the column name contains any illegal characters.
+        check_val(val: str) -> bool:
+            Checks if the value contains any illegal values.
+        write(table: str, values: list[list[str]]):
+            Inserts a row of data into the specified table, adding prefixes to column names as needed.
+        quit():
+            Closes the SQL database connection.
+    """
     
     def __init__(self, config_path: str) -> None:
         """_summary_ init sql class for connecting to sql database
@@ -200,9 +278,22 @@ class sql_client():
         self.logger.info("Connected to Server")
     
     def load_config(self):
-        '''
-        loads db connection config from config file
-        '''
+        """
+        Loads configuration settings from a JSON file specified by `self.config_path` and initializes
+        various instance attributes for database and tool configuration.
+        The method performs the following actions:
+            - Reads and parses the JSON configuration file.
+            - Extracts and assigns database configuration for "fourpp" and general database settings.
+            - Sets up tool IPs, tool prefixes, and system information.
+            - Initializes connection parameters such as host, user, password, driver, and database name.
+            - Populates lists of tool names, default column names and sizes, and four-point probe column names and sizes.
+            - Initializes column flags for each tool.
+        Raises:
+            FileNotFoundError: If the configuration file does not exist.
+            KeyError: If expected keys are missing in the configuration file.
+            json.JSONDecodeError: If the configuration file is not valid JSON.
+        """
+
         with open(self.config_path, 'r') as file:
             config: dict[str, dict[str, str]]  = json.load(file)
             self.fpp_db_config = config["fourpp"]["db"]
@@ -234,10 +325,24 @@ class sql_client():
                 self.fpp_col_names.append(key)
                 self.fpp_col_sizes.append(value)
     def connect(self):
-        '''
-        connects to sql server using configuration from json file\n
-        if connects to server but cannot find correct db will create db\n
-        '''
+        """
+        Establishes a connection to the SQL database server using the provided credentials.
+        If the specified database does not exist, it creates the database.
+        Reconnects to the server with the target database selected.
+        Steps:
+            1. Connects to the SQL server using host, user, driver, and password.
+            2. Retrieves the list of existing databases.
+            3. Checks if the target database exists; if not, creates it.
+            4. Closes the initial connection.
+            5. Reconnects to the server with the target database.
+            6. Initializes the cursor for executing SQL commands.
+        Attributes Modified:
+            self.sql: The active database connection.
+            self.cursor: The cursor for executing SQL statements.
+            self.dbs: List of existing database names.
+            self.closed: Connection closed status.
+        """
+
         self.sql = pyodbc.connect(
             host = self.host,
             user = self.user,
@@ -274,13 +379,16 @@ class sql_client():
         self.closed = self.sql.closed
         
     def check_columns(self, table: str , columns: str) -> None:
-        """_summary_         takes table and cols in and then checks table for all cols inputted\n
-        ADDS TABLE PREFIXES IS NOT PRESENT
-
-        Args:
-            table (str): table on sql db, should match the config tools section
-            columns (str): string of columns seperated by comma
         """
+        Checks if the specified columns exist in the given table. If any columns are missing,
+        attempts to add them to the table with a default type of VARCHAR(255). This needs to be fixed to deal with different data types
+        Args:
+            table (str): The name of the table to check.
+            columns (str): A comma-separated string of column names to check for existence.
+        Raises:
+            pyodbc.Error: If a database error occurs that is not related to missing columns.
+        """
+
         try:
             # print("FROM DB HANDLER")
             # print(columns)
@@ -328,18 +436,18 @@ class sql_client():
                 self.sql.commit()
     
     def table_query_builder(self, tool:str, prefix:str, cols:list[str], data_types:list[str], data_sizes:list[str]) -> str:
-        """ used to build table generating queries for SQL
-
-        Args:
-            tool (str):name of tool, gives name of table
-            prefix (str): prefix that goes in front of the columns
-            cols (list[str]): column names
-            data_types (list[str]): each columns data type
-            data_sizes (list[str]): each columns data size
-
-        Returns:
-            str: argument for self.cursor.execute()
         """
+        Builds a SQL CREATE TABLE query string based on provided column definitions.
+        Args:
+            tool (str): The name of the table to be created.
+            prefix (str): The prefix to prepend to each column name.
+            cols (list[str]): A list of column names.
+            data_types (list[str]): A list of data types for each column. If the data type already contains parentheses (e.g., "VARCHAR(255)"), it is used as is.
+            data_sizes (list[str]): A list of data sizes for each column (currently unused in the function).
+        Returns:
+            str: The constructed SQL CREATE TABLE query string.
+        """
+
         query_pre:str = f"CREATE TABLE {tool} ("
 
         query_as_list = []
@@ -362,9 +470,21 @@ class sql_client():
                         
     
     def check_tables(self):
-        '''
-        using tools from config file checks if corres. table exist, if not makes them
-        '''
+        """
+        Checks the existence of required tables in the database and creates any missing tables based on predefined schemas.
+        This method performs the following steps:
+        1. Logs the start of the table checking process.
+        2. Retrieves the list of existing base tables from the database and stores their names.
+        3. Iterates over the list of tools (excluding "host" and "testing") and checks if each tool's table exists.
+        4. For missing tables, constructs and executes a CREATE TABLE query using default column names and sizes.
+           - If the tool is "fourpp", additional columns specific to "fourpp" are appended.
+        5. Commits the changes to the database.
+        6. If the system is configured for "HMS" hall system, refreshes the table list and ensures the "hall" table has the required columns by calling `check_columns`.
+        Note:
+            - Uses a 1-second delay after committing changes to ensure SQL changes are applied.
+            - Assumes existence of attributes: `logger`, `cursor`, `sql`, `def_col_names`, `def_col_sizes`, `tools`, `fpp_col_names`, `fpp_col_sizes`, `table_query_builder`, `prefixes`, `hall_sys`, `check_columns`, and `hall_cols`.
+        """
+
         self.logger.info("checking tables and building missing")
         temp: pyodbc.Cursor|None = None
         temp = self.cursor.execute("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'")
@@ -409,45 +529,50 @@ class sql_client():
 
 
     def check_for_illegals(self, col_name: str) -> bool:
-        """_summary_ checks for sql banned chars in col name
-
-        Args:
-            col_name (str):name you want to check
-        Returns:
-            bool: 
-            false if any illegal char exist\n
-            true if there are no illegal char
         """
+        Checks if the given column name contains any illegal characters.
+        Args:
+            col_name (str): The column name to check for illegal characters.
+        Returns:
+            bool: True if the column name does not contain any illegal characters, False otherwise.
+        """
+
         for char in self.illegal_char:
             if col_name.find(char) != -1:
                 return False
         return True
     
     def check_val(self, val: str) -> bool:
-        """_summary_
-
-        Args:
-            val (str): value you want to check
-
-        Returns:
-            bool: false if any illegal char exist\n
-            true if there are no illegal char
         """
-        
+        Checks if the given string `val` contains any illegal characters.
+        Iterates through the list of illegal characters defined in `self.illegal_val`
+        and returns False if any of these characters are found in `val`. Otherwise,
+        returns True.
+        Args:
+            val (str): The string value to be checked.
+        Returns:
+            bool: True if `val` does not contain any illegal characters, False otherwise.
+        """
+
         for char in self.illegal_val:
             if val.find(char) != -1:
                 return False
         return True
     
     def write(self, table: str, values : list[list[str]]):
-        """_summary_        writes to sql database\n
-        ADDS TABLE PREFIX IF NOT ADDED\n
-
-        Args:
-            table (str):table to put the data into
-            values (list[list[str]]):a list of values formmated as follows\n
-                    [[col1,val1], [col2,val2],...,[coln, valn]]
         """
+        Inserts a new row into the specified table with the provided column-value pairs.
+        Args:
+            table (str): The name of the table to insert data into.
+            values (list[list[str]]): A list of [column, value] pairs representing the data to insert.
+                Each inner list should contain two strings: the column name and its corresponding value.
+        Notes:
+            - Column names may be prefixed based on the table and internal logic.
+            - The method checks for illegal characters in column names and values.
+            - The SQL query is constructed dynamically and executed using the class's cursor.
+            - The transaction is committed after execution.
+        """
+
         # self.cursor.execute("insert into fourpp(fpp_time, fpp_sample_id, fpp_resistance) values ('12:30', '30', '123')")
         # self.cursor.commit()
         #values is going to be formatted as         
@@ -488,7 +613,41 @@ class sql_client():
         self.sql.close()
 
 class tcp_multiserver():
-    
+    """
+    tcp_multiserver is a class for handling multithreaded TCP server operations, managing communication with multiple instrument computers, SQL servers, and a GUI interface. It supports multiple client connections, tracks sample measurements, and coordinates data exchange and logging.
+    Attributes:
+        ADDR (tuple[str, int]): Server IP address and port.
+        max_connections (int): Maximum number of allowed client connections.
+        server_socket (socket.socket): Main server socket.
+        connected_sockets (list[socket.socket]): List of currently connected client sockets.
+        starttime (float): Server start time.
+        display (Any): GUI interface for displaying information.
+        client_data (str): Data received from clients.
+        SQL (sql_client): SQL client for database operations.
+        samples (list[sample]): List of sample objects being tracked.
+        read_to_read (list[socket.socket]): Sockets ready for reading.
+        retries (int): Number of server restart attempts.
+        network_status (bool): Status of network connectivity.
+        db_status (bool|None): Status of database connectivity.
+        logger (logging.Logger): Logger for server events.
+        config (dict[str, str]): Configuration mapping tool names to IPs.
+        prefixes (dict[str, str]): Prefixes for tool data columns.
+    Methods:
+        __init__(config, ip, port, gui, max_connections=5): Initializes the server with configuration, network, and GUI settings.
+        get_sample(tool, sample_id): Retrieves or creates a sample object for a given tool and sample ID.
+        SQL_startup(): Initializes and connects to the SQL database.
+        connections(host="8.8.8.8", port=53, timeout=30): Checks network and database connectivity.
+        all_sockets_closed(): Closes the server and displays connection duration.
+        active_client_sockets(): Prints information about currently connected clients.
+        serve_client(current_socket): Handles incoming messages from a client socket.
+        update(current_socket, tool): Sends a list of pending samples to a client tool.
+        disconnect_socket(current_socket): Disconnects a client socket and updates the active list.
+        send_meta(current_socket, tool): Handles metadata exchange for a sample with a client.
+        meas_prot(current_socket, tool, t): Handles measurement protocol and data storage for a client tool.
+        get_id(current_socket): Sends the tool ID to the client.
+        server(): Main server loop for accepting and serving client connections.
+        quit(): Closes the server and disconnects from the SQL database.
+    """
     def __init__(self, config:str, ip:str, port:int, gui:Any, max_connections:int = 5):#, bus_out:"Queue[Any]" , bus_in:"Queue[Any]", max_connections:int = 5):
         """_summary_        class for handing multithreaded operation of a tcp server, handles communication to all intrument computer,\n
         to sql servers, and displaying information on the gu
@@ -895,7 +1054,27 @@ class tcp_multiserver():
         self.SQL.quit()
 
 class client():
-    
+    """
+    A TCP client class for communicating with a main TCP server.
+    This class provides methods to connect to a server, disconnect, and retrieve a client ID.
+    It uses Python's socket and logging modules for network communication and logging.
+    Attributes:
+        ADDR (tuple): The (IP, port) address of the server.
+        data (str): Placeholder for data received or sent.
+        flag (int): Status flag for client state.
+        tool (str): Identifier for the client, received from the server.
+        soc (socket.socket): The socket object used for communication.
+        logger (logging.Logger): Logger instance for this client.
+    Methods:
+        __init__(ip: str, port: int):
+            Initializes the client with the server's IP and port, and sets up logging.
+        connect():
+            Connects to the server at the specified address. Logs connection status and errors.
+        disconnect():
+            Sends a disconnect message to the server and closes the socket.
+        id():
+            Requests and returns the client ID from the server. Caches the ID after the first request.
+    """
     def __init__(self, ip:str , port:int):
         """_summary_ class for tool code to talk to main tcp server
 
@@ -956,6 +1135,24 @@ class client():
             return self.tool
         
 class FileManager:
+    """
+    FileManager is a utility class for managing data files associated with a specific tool. It provides functionality to:
+    - Initialize and manage a data directory for a given tool.
+    - Enforce a maximum storage size limit for the data directory by deleting the oldest files when the limit is exceeded.
+    - Write data to CSV files with specified headers and sample numbers, ensuring storage limits are respected.
+    Attributes:
+        tool (str): The name of the tool associated with the data files.
+        path (str): The path to the data directory for the tool.
+        size_lim (str): The maximum allowed size of the data directory in gigabytes.
+        logger (logging.Logger): Logger instance for the class.
+    Methods:
+        __init__(tool: str, size_lim: str) -> None:
+            Initializes the FileManager, sets up the data directory, and configures logging.
+        rotating_file_handler() -> None:
+            Checks the total size of the data directory and deletes the oldest file if the size exceeds the specified limit.
+        write_data(sample_num: str, header: list[str], data: list[str] | list[list[str | float | int]]) -> None:
+            Writes data to a CSV file in the data directory, using the provided sample number and header. Ensures storage limits are enforced before writing.
+    """
     def __init__(self, tool: str, size_lim: str) -> None:
         """_summary_
 
