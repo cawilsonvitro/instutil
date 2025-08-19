@@ -184,6 +184,11 @@ class sql_client():
         self.illegal_val: list[str] = ["hour", "second", "minute", "min", "-", ":"]
         self.hall_cols: list[str] = []
         
+        #col check flags
+        self.col_flags = []
+        
+        
+        
         #int prefixes
         self.prefixes: dict[str,str] = {
             
@@ -192,7 +197,7 @@ class sql_client():
         class_name = str(type(self))
         name = class_name.split(" ")[-1][:-1].replace("'", "")
         self.logger = logging.getLogger(name)
-        self.logger.info("Server initalized")
+        self.logger.info("Connected to Server")
     
     def load_config(self):
         '''
@@ -212,7 +217,14 @@ class sql_client():
         self.db = self.config_db["db"]
         #tool names from file
         self.tools = list(self.config_tools.values())
-       
+        #default col from sys
+        col_dict = self.config_db["default_col"]
+        self.def_col_names = []
+        self.def_col_sizes = []
+        for key, value in col_dict.items():
+            self.def_col_names.append(key)
+            self.def_col_sizes.append(value)
+        self.col_flags = [False] * len(self.tools)
     def connect(self):
         '''
         connects to sql server using configuration from json file\n
@@ -222,7 +234,8 @@ class sql_client():
             host = self.host,
             user = self.user,
             driver = self.driver,
-            password = self.pw
+            password = self.pw,
+            autocommit = True
         )
         self.cursor = self.sql.cursor()
         
@@ -231,10 +244,12 @@ class sql_client():
         self.cursor.execute("SELECT name FROM sys.databases;")
         
         self.dbs = [x[0] for x in self.cursor]
+        self.cursor.commit()
+         
         
         if self.db not in self.dbs:
             self.cursor.execute(f"CREATE DATABASE {self.db}")
-        
+        self.cursor.commit()
         self.sql.close()
         
         self.sql = pyodbc.connect(
@@ -242,7 +257,8 @@ class sql_client():
             user = self.user,
             password = self.pw,
             driver = self.driver,
-            database = self.db
+            database = self.db,
+            autocommit = False
         )
 
         self.cursor = self.sql.cursor()
@@ -320,9 +336,11 @@ class sql_client():
 
         query_as_list = []
         i = 0 
-
+        print(data_types,cols)
         for col in cols:
-            temp = f"{prefix}_{col} {data_types[i]}({data_sizes[i]})"
+            if "(" in data_types[i] and ")" in data_types[i]:temp = f"{prefix}_{col} {data_types[i]}"
+            else: 
+                temp = f"{prefix}_{col} {data_types[i]}({data_types[i]})"
             query_as_list.append(temp)
             i += 1
             
@@ -344,26 +362,17 @@ class sql_client():
         temp = self.cursor.execute("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'")
         self.tables = [x[2] for x in temp]
         hall_name:str = ""
-        cols = ["sample_id", "pos", "time", "description"]
-        sizes = ["255"] * 4
-        sizes.append("8000")
-        data_types = ["VARCHAR"] * 4
+        cols = self.def_col_names#["sample_id", "pos", "time", "description"]
+        sizes = self.def_col_sizes#["255"] * 4
+        #sizes.append("8000")
+        #data_types = ["VARCHAR"] * 4
         for tool in self.tools:
-            if tool == "hall":hall_name = tool
+            if tool == "hall":hall_name = tool #seems unneeded but the var is used
             
             if tool not in self.tables:
-                if tool == "fourpp":
-                    fourpp_cols = cols.copy()
-                    fourpp_cols.append("Resistance")
-                    sizes.append("255")
-                    data_types.append("VARCHAR")
-                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],fourpp_cols,data_types,sizes))
-                if tool == "nearir":
-                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],cols,data_types,sizes))
-                if tool == "hall":
-                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],cols,data_types,sizes))
-                if tool == "rdt":
-                    self.cursor.execute(self.table_query_builder(tool,self.prefixes[tool],cols,data_types,sizes))
+                if tool != "host" and tool != "testing":
+                    query = self.table_query_builder(tool,self.prefixes[tool],cols,sizes,[])
+                    self.cursor.execute(query)
 
         self.sql.commit()
         
@@ -1006,4 +1015,7 @@ class FileManager:
 
     
 if __name__ == "__main__":
-    # sql_client = SQLClient()
+    sqltest = sql_client("config.json")
+    sqltest.load_config()
+    sqltest.connect()
+    sqltest.check_tables()

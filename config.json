@@ -21,10 +21,7 @@
         "USB-9211A": {
             "Min_val": "-0.05", 
             "Max_val": "0.05"
-        } ,
-        "db":{
-            
-        }
+        } 
     },
     "Nir":{
         "int_tim": "50",
@@ -33,18 +30,20 @@
         "x_timing": "3"
     },
     "fourpp":{
-        "sys":{
             "resource_string":"USB0::0xF4EC::0x1208::SDM36HCD801150::INSTR",
             "sample_count": "30"
-        },
-        "db":{
-            "restistance": "VARCHAR(255)"
-        }
     },
     "Database_Config":{
-        "host": "WHAMNUC1",
+        "host": "localhost",
         "db": "glass_test",
-        "driver": "{ODBC Driver 17 for SQL Server}"
+        "driver": "{ODBC Driver 17 for SQL Server}",
+        "default_col":{
+            "sample_id": "VARCHAR(255)",
+            "pos":"VARCHAR(255)",
+            "time":"VARCHAR(255)",
+            "operator_id":"VARCHAR(255)",
+            "Description":"VARCHAR(8000)"
+        }
     },
     "Tool_pre": {
         "fourpp": "fpp",
