@@ -1145,6 +1145,7 @@ class FileManager:
         path (str): The path to the data directory for the tool.
         size_lim (str): The maximum allowed size of the data directory in gigabytes.
         logger (logging.Logger): Logger instance for the class.
+        
     Methods:
         __init__(tool: str, size_lim: str) -> None:
             Initializes the FileManager, sets up the data directory, and configures logging.
