@@ -675,6 +675,10 @@ class tcp_multiserver():
         self.starttime: float
         
         self.display = gui
+        self.gui_available: bool = False
+        
+        if self.display is not None:
+            self.gui_available = True
         
         # print("From TCP SERVER:",self.display.teststr)
         #data managementjson
@@ -686,6 +690,7 @@ class tcp_multiserver():
         
         #client ids
         self.read_to_read: list[socket.socket] = []
+        self.tool: str = ""
         
         #connection flags
         self.retries: int = 0
@@ -693,7 +698,6 @@ class tcp_multiserver():
         self.db_status: bool|None = False
         
         #logging
-
         class_name = str(type(self))
         name = class_name.split(" ")[-1][:-1].replace("'", "")
         
@@ -798,7 +802,7 @@ class tcp_multiserver():
         for c in self.connected_sockets:
             print("\t", c.getpeername())
         
-        self.display.test_connections() #tests connections to gui
+        if self.gui_available: self.display.test_connections() #tests connections to gui
     
     def serve_client(self, current_socket : socket.socket):
         '''Takes the msg received from the client and handles it accordingly'''
@@ -991,7 +995,12 @@ class tcp_multiserver():
             self.SQL.write(tool, values)
         
     def get_id(self, current_socket):
-        id: str = self.config[current_socket.getpeername()[0]]
+        try:
+            print(current_socket.getpeername()[0])
+            id: str = self.config[current_socket.getpeername()[0]]
+        except KeyError:
+            id = "Tool not found"
+            self.logger.error(f"{self.tool} not found please add to config")
         current_socket.send(id.encode())
              #   print("Responded by: Sending the message back to the client")   
         
