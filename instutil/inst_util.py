@@ -124,7 +124,7 @@ def parse(filepath:str) -> tuple[list[str],list[str]]:
     last = headers[-1]
     new = headers[:29]
 
-    for header in headers[19:28]: #type:ignore
+    for header in headers[19:29]: #type:ignore
         new.append(headers[i] + minus)
         new[i] =  headers[i] + plus
     
@@ -520,8 +520,8 @@ class sql_client():
         if self.hall_sys == "HMS":
             temp = self.cursor.execute("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'")
             self.tables = [x[2] for x in temp]
-            #self.hall_cols,_ = parse(r"sample_file.txt")
-            self.hall_cols = ['DATE', 'User_Name', 'Sample_Name', 'I(mA)', 'B', 'D', 'D_T', 'MN', 'T(K)', 'Nb', 'u', 'rho', 'RH', 'RHA', 'RHB', 'NS', 'SIGMA', 'DELTA', 'ALPHA', 'Vab+I', 'Vbc+I', 'Vac+I', 'Vmac+I', 'V-mac+I', 'Vcd+I', 'Vda+I', 'Vbd+I', 'Vmbd+I', 'V-mbd', 'Vab-I', 'Vbc-I', 'Vac-I', 'Vmac-I', 'V-mac-I', 'Vcd-I', 'Vda-I', 'Vbd-I', 'Vmbd-I', 'Rs']
+            self.hall_cols,_ = parse(r"sample_file.txt")
+            # self.hall_cols = ['DATE', 'User_Name', 'Sample_Name', 'I(mA)', 'B', 'D', 'D_T', 'MN', 'T(K)', 'Nb', 'u', 'rho', 'RH', 'RHA', 'RHB', 'NS', 'SIGMA', 'DELTA', 'ALPHA', 'Vab+I', 'Vbc+I', 'Vac+I', 'Vmac+I', 'V-mac+I', 'Vcd+I', 'Vda+I', 'Vbd+I', 'Vmbd+I', 'V-mbd-I', 'V-mbd+I' 'Vab-I', 'Vbc-I', 'Vac-I', 'Vmac-I', 'V-mac-I', 'Vcd-I', 'Vda-I', 'Vbd-I', 'Vmbd-I', 'Rs']
             self.check_columns(hall_name, (",").join(self.hall_cols))                    
         
         #checking that extra cols got added for other 4 tools
@@ -577,7 +577,6 @@ class sql_client():
         # self.cursor.commit()
         #values is going to be formatted as         
         # values = [[col1, val1] , [col2, val2]]
-        
         query = f"insert into {table}("
         end = "("
         for value in values:
@@ -596,10 +595,17 @@ class sql_client():
                 end += f"\'{value[1]}\',"
             else:
                 end += f"\'{value[1]}\', "
-        end = end[:-1] 
+
+        # print("VALUESSS:",end[-1])
+        while end[-1] != " " and end[-1] != "," and end[-1] != "":
+            end = end[:-1]
+        end = end[:-1]
+        # print("VALUESSS:",end[-1])
+
+
         
         query = query[:-2] 
-        
+
         query = query + ")" + " values " + end + ")"
         print(query)
         self.cursor.execute(query)
@@ -938,7 +944,7 @@ class tcp_multiserver():
                               
         current_socket.send(f"awaiting value from {tool}".encode())
         value = current_socket.recv(32768).decode()
-
+        print("GOT VALUE", value)
         current_socket.send("data received".encode())
 
         if tool == "fourpp":
@@ -971,6 +977,7 @@ class tcp_multiserver():
                     
         if tool == "hall":
             data = value.split(",")
+            print("DDATA", len(data), len(self.SQL.hall_cols))
             i = 0
             for sql_col in self.SQL.hall_cols:
                 values.append([sql_col, data[i]])
@@ -980,7 +987,7 @@ class tcp_multiserver():
                     # values.append(["nb", str(value)])
                     
                     
-                    
+            print(data)
             self.SQL.write(tool, values)
         
     def get_id(self, current_socket):
